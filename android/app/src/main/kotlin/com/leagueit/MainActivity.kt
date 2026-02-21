@@ -1,0 +1,6 @@
+package com.hyojune.leagueit
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity: FlutterActivity() {
+} 

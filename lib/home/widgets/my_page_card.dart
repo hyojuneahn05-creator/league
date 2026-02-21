@@ -58,9 +58,7 @@ class MyPageCard extends StatelessWidget {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const SimplePage(title: "Create Account"),
-                    ),
+                    MaterialPageRoute(builder: (_) => const SignUpPage()),
                   );
                 },
               ),
@@ -70,9 +68,7 @@ class MyPageCard extends StatelessWidget {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const SimplePage(title: "Profile"),
-                    ),
+                    MaterialPageRoute(builder: (_) => const ProfilePage()),
                   );
                 },
               ),
@@ -81,9 +77,7 @@ class MyPageCard extends StatelessWidget {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const SimplePage(title: "My League"),
-                    ),
+                    MaterialPageRoute(builder: (_) => const MyLeaguePage()),
                   );
                 },
               ),
@@ -92,9 +86,7 @@ class MyPageCard extends StatelessWidget {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const SimplePage(title: "Password"),
-                    ),
+                    MaterialPageRoute(builder: (_) => const PasswordPage()),
                   );
                 },
               ),

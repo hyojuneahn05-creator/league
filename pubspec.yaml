@@ -30,10 +30,20 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+    
+  http: ^1.2.0
+
+  image_picker: ^1.0.7
+  flutter_secure_storage: ^9.2.4
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  firebase_core: ^4.4.0
+  firebase_auth: ^6.1.4
+  cloud_firestore: ^6.0.2
+  google_sign_in: ^7.2.0
+  sign_in_with_apple: ^7.0.1
 
 dev_dependencies:
   flutter_test:
@@ -60,6 +70,7 @@ flutter_launcher_icons:
 flutter:
   assets:
     - assets/leagueit_logo.png
+    - assets/google_logo.png
 
 
   # The following line ensures that the Material Icons font is

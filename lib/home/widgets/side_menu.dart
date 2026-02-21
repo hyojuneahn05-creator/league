@@ -6,20 +6,23 @@ class SideMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Color fg = Theme.of(context).colorScheme.onSurface;
+    final Color bg = Theme.of(context).scaffoldBackgroundColor;
+
     return Material(
       color: Colors.transparent,
       child: Container(
         width: width,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: const BorderRadius.only(
             topRight: Radius.circular(26),
             bottomRight: Radius.circular(26),
           ),
-          boxShadow: [
+          boxShadow: const [
             BoxShadow(
-              color: Colors.black26,
-              blurRadius: 12,
+              color: Colors.black38,
+              blurRadius: 14,
               offset: Offset(6, 0),
             ),
           ],
@@ -43,10 +46,11 @@ class SideMenu extends StatelessWidget {
                     "LeagueIt",
                     overflow: TextOverflow.ellipsis,
                     maxLines: 1,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       letterSpacing: 0.8,
+                      color: fg,
                     ),
                   ),
                 ),
@@ -59,9 +63,7 @@ class SideMenu extends StatelessWidget {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const SimplePage(title: "About Us"),
-                  ),
+                  MaterialPageRoute(builder: (_) => const AboutPage()),
                 );
               },
             ),
@@ -72,9 +74,7 @@ class SideMenu extends StatelessWidget {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const SimplePage(title: "PlayBook"),
-                  ),
+                  MaterialPageRoute(builder: (_) => const PlaybookPage()),
                 );
               },
             ),
@@ -85,9 +85,7 @@ class SideMenu extends StatelessWidget {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const SimplePage(title: "Privacy Policy"),
-                  ),
+                  MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()),
                 );
               },
             ),
@@ -98,9 +96,7 @@ class SideMenu extends StatelessWidget {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const SimplePage(title: "FAQs"),
-                  ),
+                  MaterialPageRoute(builder: (_) => const FAQPage()),
                 );
               },
             ),
@@ -111,9 +107,7 @@ class SideMenu extends StatelessWidget {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder: (_) => const SimplePage(title: "Settings"),
-                  ),
+                  MaterialPageRoute(builder: (_) => const SettingsPage()),
                 );
               },
             ),
@@ -135,10 +129,10 @@ class _MenuItem extends StatelessWidget {
     final textPainter = TextPainter(
       text: TextSpan(
         text: title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 17,
           fontWeight: FontWeight.w500,
-          color: Colors.black87,
+          color: Theme.of(context).colorScheme.onSurface,
         ),
       ),
       maxLines: 1,

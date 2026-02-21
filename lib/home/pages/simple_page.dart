@@ -28,10 +28,11 @@ class _SimplePageState extends State<SimplePage> {
       child: Stack(
         children: [
           Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             appBar: LeagueItSubAppBar(
               key: _appBarKey,
               onMyPageTap: _toggleMyPage,
+              showSearch: false,
             ),
             body: Center(
               child: Text(widget.title, style: const TextStyle(fontSize: 24)),
@@ -78,8 +79,15 @@ class _SimplePageState extends State<SimplePage> {
 
 class LeagueItSubAppBar extends StatefulWidget implements PreferredSizeWidget {
   final VoidCallback onMyPageTap;
+  final String? title;
+  final bool showSearch;
 
-  const LeagueItSubAppBar({super.key, required this.onMyPageTap});
+  const LeagueItSubAppBar({
+    super.key,
+    required this.onMyPageTap,
+    this.title,
+    this.showSearch = true,
+  });
 
   @override
   Size get preferredSize => const Size.fromHeight(60);
@@ -93,6 +101,17 @@ class _LeagueItSubAppBarState extends State<LeagueItSubAppBar> {
 
   final FocusNode _searchFocus = FocusNode();
   final TextEditingController _controller = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _searchFocus.addListener(() {
+      if (!_searchFocus.hasFocus && _isSearching) {
+        _controller.clear();
+        setState(() => _isSearching = false);
+      }
+    });
+  }
 
   void _closeSearch() {
     if (_isSearching) {
@@ -121,95 +140,81 @@ class _LeagueItSubAppBarState extends State<LeagueItSubAppBar> {
       elevation: 0,
       centerTitle: true,
 
-      title: SizedBox(
-        height: 24,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            AnimatedAlign(
-              duration: const Duration(milliseconds: 280),
-              curve: Curves.easeOut,
-              alignment: _isSearching ? Alignment.centerLeft : Alignment.center,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 180),
-                opacity: _isSearching ? 0 : 1,
-                child: GestureDetector(
-                  onTap: () {
-                    homeKey.currentState?.resetHomeUI();
-                    Navigator.popUntil(context, (route) => route.isFirst);
-                  },
-                  child: const Text(
-                    "LeagueIt",
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
+      title: GestureDetector(
+        onTap: () {
+          homeKey.currentState?.resetHomeUI();
+          Navigator.popUntil(context, (route) => route.isFirst);
+        },
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 180),
+          opacity: _isSearching ? 0 : 1,
+          child: Text(
+            widget.title ?? "LeagueIt",
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
             ),
-          ],
+          ),
         ),
       ),
 
       actions: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            setState(() => _isSearching = true);
-            Future.delayed(Duration.zero, () {
-              _searchFocus.requestFocus();
-            });
-          },
-          child: SizedBox(
-            width: 40,
-            height: 40,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                const Center(child: Icon(Icons.search, color: Colors.black)),
-
-                if (_isSearching)
-                  Positioned(
-                    bottom: -2,
-                    right: 0,
-                    child: SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.45,
-                      height: 36,
-                      child: TextField(
-                        focusNode: _searchFocus,
-                        controller: _controller,
-                        autofocus: true,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.only(bottom: 8),
+        if (widget.showSearch)
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              setState(() => _isSearching = true);
+              Future.delayed(Duration.zero, () {
+                _searchFocus.requestFocus();
+              });
+            },
+            child: SizedBox(
+              width: 40,
+              height: 40,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  const Center(child: Icon(Icons.search, color: Colors.black)),
+                  if (_isSearching)
+                    Positioned(
+                      bottom: -2,
+                      right: 0,
+                      child: SizedBox(
+                        width: MediaQuery.of(context).size.width * 0.45,
+                        height: 36,
+                        child: TextField(
+                          focusNode: _searchFocus,
+                          controller: _controller,
+                          autofocus: true,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            border: InputBorder.none,
+                            contentPadding: EdgeInsets.only(bottom: 8),
+                          ),
+                          style: const TextStyle(fontSize: 14),
                         ),
-                        style: const TextStyle(fontSize: 14),
                       ),
                     ),
+                  Positioned(
+                    bottom: 6,
+                    right: 0,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 280),
+                      curve: Curves.easeOut,
+                      height: 1.4,
+                      width: _isSearching
+                          ? MediaQuery.of(context).size.width * 0.45
+                          : 0,
+                      decoration: const BoxDecoration(color: Colors.black),
+                    ),
                   ),
-
-                Positioned(
-                  bottom: 6,
-                  right: 0,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 280),
-                    curve: Curves.easeOut,
-                    height: 1.4,
-                    width: _isSearching
-                        ? MediaQuery.of(context).size.width * 0.45
-                        : 0,
-                    decoration: const BoxDecoration(color: Colors.black),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
 
-        const SizedBox(width: 12),
+        if (widget.showSearch) const SizedBox(width: 12),
 
         /// 👤 MY PAGE
         GestureDetector(

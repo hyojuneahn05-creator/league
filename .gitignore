@@ -43,3 +43,18 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Firebase
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+.firebase/
+
+# Node
+node_modules/
+
+# Local docs
+*.docx
+~$*.docx
+
+# Android build
+android/build/
