@@ -51,6 +51,7 @@ ios/Runner/GoogleService-Info.plist
 
 # Node
 node_modules/
+functions/.secret.local
 
 # Local docs
 *.docx

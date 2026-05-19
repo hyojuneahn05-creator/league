@@ -21,8 +21,9 @@ class CardBase extends StatelessWidget {
     final Color bg = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final Color stroke = isDark ? Colors.white70 : Colors.black87;
     // Slightly different greens per league (K League vs KBO).
-    final Color accent =
-        isSoccer ? const Color(0xFF00A86B) : const Color(0xFF7CB342);
+    final Color accent = isSoccer
+        ? const Color(0xFF00A86B)
+        : const Color(0xFF7CB342);
     const double headerH = 80;
     const double borderW = 2;
     const double outerRadius = 18;
@@ -30,14 +31,15 @@ class CardBase extends StatelessWidget {
     final double headerInnerH = headerH - borderW;
     final Color headerTop = Color.lerp(accent, Colors.white, 0.06)!;
     final Color headerBottom = Color.lerp(accent, Colors.black, 0.12)!;
-    final IconData cornerSportIcon =
-        isSoccer ? Icons.sports_soccer : Icons.sports_baseball;
+    final IconData cornerSportIcon = isSoccer
+        ? Icons.sports_soccer
+        : Icons.sports_baseball;
     final Color cornerSportColor = (isDark ? Colors.white : Colors.black)
         .withOpacity(isDark ? 0.10 : 0.08);
 
     return Container(
-      width: 360,
-      height: 200,
+      width: double.infinity,
+      height: double.infinity,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: bg,
@@ -89,11 +91,7 @@ class CardBase extends StatelessWidget {
           Positioned(
             left: -72,
             bottom: -78,
-            child: Icon(
-              cornerSportIcon,
-              size: 210,
-              color: cornerSportColor,
-            ),
+            child: Icon(cornerSportIcon, size: 210, color: cornerSportColor),
           ),
           Padding(
             padding: const EdgeInsets.all(20),
@@ -159,8 +157,14 @@ class CardBase extends StatelessWidget {
 class MatchupCard extends StatelessWidget {
   final bool isSoccer;
   final VoidCallback onStart;
+  final _FantasyMatchupView? matchup;
 
-  const MatchupCard({super.key, required this.isSoccer, required this.onStart});
+  const MatchupCard({
+    super.key,
+    required this.isSoccer,
+    required this.onStart,
+    this.matchup,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -168,15 +172,34 @@ class MatchupCard extends StatelessWidget {
     final IconData leagueIcon = isSoccer
         ? Icons.sports_soccer
         : Icons.sports_baseball;
-    final String homeEmoji = isSoccer ? '🦊' : '🦁';
-    final String awayEmoji = isSoccer ? '🐻' : '🐯';
+    final String homeLabel = matchup?.myTeam.teamName ?? 'You';
+    final String awayLabel = matchup?.opponent.teamName ?? 'Opponent';
+    final homeBranding = matchup == null
+        ? null
+        : _fantasyTeamBrandingFor(
+            uid: matchup!.myTeam.uid,
+            teamName: matchup!.myTeam.teamName,
+          );
+    final awayBranding = matchup == null
+        ? null
+        : _fantasyTeamBrandingFor(
+            uid: matchup!.opponent.uid,
+            teamName: matchup!.opponent.teamName,
+          );
+    final String roundLabel = matchup == null
+        ? 'This Week'
+        : 'Round ${matchup!.round}';
+    final String scoreLabel = matchup == null
+        ? 'vs'
+        : '${matchup!.myScore.toStringAsFixed(1)} vs ${matchup!.opponentScore.toStringAsFixed(1)}';
     final theme = Theme.of(context);
     final bool isDark = theme.brightness == Brightness.dark;
     final Color bg = isDark ? const Color(0xFF1E1E1E) : Colors.white;
     final Color stroke = isDark ? Colors.white70 : Colors.black87;
     // Slightly different greens per league (K League vs KBO).
-    final Color accent =
-        isSoccer ? const Color(0xFF00A86B) : const Color(0xFF7CB342);
+    final Color accent = isSoccer
+        ? const Color(0xFF00A86B)
+        : const Color(0xFF7CB342);
     const double headerH = 56;
     const double borderW = 2;
     const double outerRadius = 18;
@@ -189,8 +212,8 @@ class MatchupCard extends StatelessWidget {
       onTap: onStart,
       borderRadius: BorderRadius.circular(18),
       child: Container(
-        width: 360,
-        height: 200,
+        width: double.infinity,
+        height: double.infinity,
         clipBehavior: Clip.antiAlias,
         decoration: BoxDecoration(
           color: bg,
@@ -250,7 +273,7 @@ class MatchupCard extends StatelessWidget {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '$leagueLabel · This Week',
+                          '$leagueLabel · $roundLabel',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
@@ -263,19 +286,46 @@ class MatchupCard extends StatelessWidget {
                     ],
                   ),
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      _TeamBadge(emoji: homeEmoji, label: 'You'),
-                      Text(
-                        'vs',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: stroke,
+                      Expanded(
+                        child: _TeamBadge(
+                          icon:
+                              homeBranding?.icon ??
+                              (isSoccer
+                                  ? Icons.shield_outlined
+                                  : Icons.sports_baseball),
+                          label: homeLabel,
+                          fillColor: homeBranding?.tint,
+                          iconColor: _FantasyTeamBranding.defaultIconColor,
                         ),
                       ),
-                      _TeamBadge(emoji: awayEmoji, label: 'Alex'),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            scoreLabel,
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: stroke,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: _TeamBadge(
+                          icon:
+                              awayBranding?.icon ??
+                              (isSoccer
+                                  ? Icons.workspace_premium_outlined
+                                  : Icons.emoji_events_outlined),
+                          label: awayLabel,
+                          fillColor: awayBranding?.tint,
+                          iconColor: _FantasyTeamBranding.defaultIconColor,
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -289,10 +339,17 @@ class MatchupCard extends StatelessWidget {
 }
 
 class _TeamBadge extends StatelessWidget {
-  final String emoji;
+  final IconData icon;
   final String label;
+  final Color? fillColor;
+  final Color? iconColor;
 
-  const _TeamBadge({required this.emoji, required this.label});
+  const _TeamBadge({
+    required this.icon,
+    required this.label,
+    this.fillColor,
+    this.iconColor,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -306,20 +363,27 @@ class _TeamBadge extends StatelessWidget {
           width: 70,
           height: 70,
           decoration: BoxDecoration(
-            color: bg.withOpacity(0.7),
+            color: fillColor ?? bg.withOpacity(0.7),
             shape: BoxShape.circle,
             border: Border.all(color: stroke.withOpacity(0.3)),
           ),
           child: Center(
-            child: Text(emoji, style: const TextStyle(fontSize: 32)),
+            child: Icon(
+              icon,
+              size: 28,
+              color: iconColor ?? stroke.withOpacity(0.7),
+            ),
           ),
         ),
         const SizedBox(height: 6),
         Text(
           label,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
           style: TextStyle(
             fontWeight: FontWeight.w600,
-            fontSize: 14,
+            fontSize: 13,
             color: stroke,
           ),
         ),

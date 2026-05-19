@@ -1,0 +1,435 @@
+Song Bum-Keun | 송범근 | Jeonbuk Motors | Goalkeeper | 31
+Lee Ju-Hyun | 이주현 | Jeonbuk Motors | Goalkeeper | 1
+Gong Si-Hyeun | 공시현 | Jeonbuk Motors | Goalkeeper | 29
+Lee Han-gyeol | 이한결 | Jeonbuk Motors | Goalkeeper | 51
+Jeon Ji-Wan | 전지완 | Jeonbuk Motors | Goalkeeper | 71
+Chung Dae-young | 정대영 | Jeonbuk Motors | Goalkeeper | 91
+Kim Young-Bin | 김영빈 | Jeonbuk Motors | Defender | 2
+Yeon Je-Un | 연제운 | Jeonbuk Motors | Defender | 3
+Cho Wi-Je | 조위제 | Jeonbuk Motors | Defender | 4
+Park Ji-Su | 박지수 | Jeonbuk Motors | Defender | 5
+Kim Ha-Jun | 김하준 | Jeonbuk Motors | Defender | 15
+Kim Jun-Young | 김준영 |  Jeonbuk Motors | Defender | 22
+Kim Tae-Hwan | 김태환 | Jeonbuk Motors | Defender | 23
+Lee Sang-Myung | 이상명 | Jeonbuk Motors | Defender | 24
+Hwang Seung-Jun | 황승준 | Jeonbuk Motors | Defender | 27
+Seo Jeong-Hyeok | 서정혁 | Jeonbuk Motors | Defender | 39
+Kim Ju-Hyeong | 김주형 | Jeonbuk Motors | Defender | 44
+Choi Jin-Woong | 최진웅 | Jeonbuk Motors | Defender | 55
+Choi Woo-Jin | 최우진 | Jeonbuk Motors | Defender | 66
+Kim Su-Hyeong | 김수형 | Jeonbuk Motors | Defender | 74
+Kim Tae-Hyun | 김태현 | Jeonbuk Motors | Defender | 77
+Kwak Hee-Byeok | 곽희벽 | Jeonbuk Motors | Defender | 80
+Maeng Seong-Ung | 맹성웅 | Jeonbuk Motors | Midfielder | 6
+Oberdan | 오베르단 | Jeonbuk Motors | Midfielder | 8
+Kang Sang-Yoon | 강상윤 | Jeonbuk Motors | Midfielder | 13
+João Gamboa | 감보아 | Jeonbuk Motors | Midfielder | 16
+Jin Tae-Ho | 진태호 | Jeonbuk Motors | Midfielder | 17
+Moon Jun-Hyeok | 문준혁 | Jeonbuk Motors | Midfielder | 26
+Lee Yeong-Jae | 이영재 | Jeonbuk Motors | Midfielder | 28
+Kim Yeong-Hwan | 김영환 | Jeonbuk Motors | Midfielder | 30
+Jang Nam-ung | 장남웅 | Jeonbuk Motors | Midfielder | 36
+Woo Hyun-Soo | 우현수 | Jeonbuk Motors | Midfielder | 42
+Lee Geon-Hee | 이건희 | Jeonbuk Motors | Midfielder | 47
+Park Hyun-Min | 박현민 | Jeonbuk Motors | Midfielder | 70
+Yoon Hyun-Seok | 윤현석 | Jeonbuk Motors | Midfielder | 88
+Kim Jin-Gyu | 김진규 | Jeonbuk Motors | Midfielder | 97
+Lee Dong-Jun | 이동준 | Jeonbuk Motors | Midfielder | 7
+Lee Seung-Woo | 이승우 | Jeonbuk Motors | Midfielder | 10
+Kim Seung-Sub | 김승섭 | Jeonbuk Motors | Midfielder | 11
+P. Twumasi | 츄마시 | Jeonbuk Motors | Midfielder | 21
+Han Seok-Jin | 한석진 | Jeonbuk Motors | Midfielder | 33
+Um Seung-Min | 엄승민 | Jeonbuk Motors | Midfielder | 34
+An Tae-Hun | 안태훈 | Jeonbuk Motors | Midfielder | 40
+Kim Chang-Hun | 김창훈 | Jeonbuk Motors | Midfielder | 79
+Lim Jun-Hwi | 임준휘 | Jeonbuk Motors | Midfielder | 98
+Tiago Orobó | 티아고 | Jeonbuk Motors | Forward | 9
+Park Ju-Yeong | 박주영 | Jeonbuk Motors | Forward | 19
+Jeong Sang-Woon | 정상운 | Jeonbuk Motors | Forward | 90
+Kim Du-Hyeon | 김두현 | Jeonbuk Motors | Forward | 92
+A. Compagno | 콤파뇨 | Jeonbuk Motors | Forward | 96
+Bruno Mota | 모따 | Jeonbuk Motors | Forward | 99
+
+Lee Chang-Geun | 이창근 | Daejeon Citizen | Goalkeeper | 1
+Lee Jun-Seo | 이준서 | Daejeon Citizen | Goalkeeper | 25
+Kim Min-Soo | 김민수 | Daejeon Citizen | Goalkeeper | 31
+Lee Kyeong-Tae | 이경태 | Daejeon Citizen | Goalkeeper | 40
+Park Kyu-Hyun | 박규현 | Daejeon Citizen | Defender | 2
+Kim Min-Duk | 김민덕 | Daejeon Citizen | Defender | 3
+Cho Sung-Gwon | 조성권 | Daejeon Citizen | Defender | 4
+Lim Jong-Eun | 임종은 | Daejeon Citizen | Defender | 5
+Kang Yun-Sung | 강윤성 | Daejeon Citizen | Defender | 6
+Kim Jin-Ya | 김진야 | Daejeon Citizen | Defender | 13
+Lee Myung-Jae | 이명재 | Daejeon Citizen | Defender | 16
+Oh Jae-Suk | 오재석 | Daejeon Citizen | Defender | 22
+Seo Young-Jae | 서영재 | Daejeon Citizen | Defender | 23
+Kim Moon-Hwan | 김문환 | Daejeon Citizen | Defender | 33
+Ha Chang-Rae | 하창래 | Daejeon Citizen | Defender | 45
+A. Krivotsyuk | 안톤 | Daejeon Citizen | Defender | 98
+Victor Bobsin | 밥신 | Daejeon Citizen | Midfielder | 8
+Um Won-Sang | 엄원상 | Daejeon Citizen | Midfielder | 11
+Kim Jun-Bum | 김준범 | Daejeon Citizen | Midfielder | 14
+G. Ludwigson | 루빅손 | Daejeon Citizen | Midfielder | 17
+Lee Hyun-Sik | 이현식 | Daejeon Citizen | Midfielder | 20
+Kim Bong-Soo | 김봉수 | Daejeon Citizen | Midfielder | 30
+Lee Soon-Min | 이순민 | Daejeon Citizen | Midfielder | 44
+Kim Hyeon-Ug | 김현욱 | Daejeon Citizen | Midfielder | 70
+M. Ishida | 마사 | Daejeon Citizen | Midfielder | 7
+Seo Jin-Su | 서진수 | Daejeon Citizen | Midfielder | 19
+Jeong Jae-Hee | 정재희 | Daejeon Citizen | Midfielder | 27
+D. Oliveira | 디오고 | Daejeon Citizen | Forward | 9
+Joo Min-Kyu | 주민규 | Daejeon Citizen | Forward | 10
+João Victor | 주앙 빅토르 | Daejeon Citizen | Forward | 77
+Yu Kang-Hyun | 유강현 | Daejeon Citizen | Forward | 99
+
+Jo Hyeon-Woo | 조현우 | Ulsan Hyundai FC | Goalkeeper | 21
+Choi Ju-Ho | 최주호 | Ulsan Hyundai FC | Goalkeeper | 1
+Ryu Seong-Min | 류성민 | Ulsan Hyundai FC | Goalkeeper | 13
+Moon Jung-In | 문정인 | Ulsan Hyundai FC | Goalkeeper | 23
+Yoon Jong-Gyu | 윤종규 | Ulsan Hyundai FC | Defender | 2
+Seo Myeong-Kwan | 서명관 | Ulsan Hyundai FC | Defender | 4
+Jung Seung-Hyun | 정승현 | Ulsan Hyundai FC | Defender | 15
+Kang Sang-Woo | 강상우 | Ulsan Hyundai FC | Defender | 17
+Kim Young-Gwon | 김영권 | Ulsan Hyundai FC | Defender | 19
+Cho Hyun-Taek | 조현택 | Ulsan Hyundai FC | Defender | 26
+Lee Jae-Ik | 이재익 | Ulsan Hyundai FC | Defender | 28
+M. Trojak | 트로야크 | Ulsan Hyundai FC | Defender | 66
+Sim Sang-Min | 심상민 | Ulsan Hyundai FC | Defender | 77
+Choi Seok-Hyun | 최석현 | Ulsan Hyundai FC | Defender | 96
+D. Bojanić | 보야니치 | Ulsan Hyundai FC | Midfielder | 6 
+Lee Hui-Gyun | 이희균 | Ulsan Hyundai FC | Midfielder | 8
+Lee Dong-Gyeong | 이동경 | Ulsan Hyundai FC | Midfielder | 10
+Lee Jin-Hyun | 이진현 | Ulsan Hyundai FC | Midfielder | 14
+Park Woo-Jin | 박우진 | Ulsan Hyundai FC | Midfielder | 16
+Lee Min-Hyuk | 이민혁 | Ulsan Hyundai FC | Midfielder | 23
+Lee Gyu-Sung | 이규성 | Ulsan Hyundai FC | Midfielder | 24
+Pedrinho | 페드링요 | Ulsan Hyundai FC | Midfielder | 27
+Jang Si-Young | 장시영 | Ulsan Hyundai FC | Midfielder | 33
+Jo Min-Seo | 조민서 | Ulsan Hyundai FC | Midfielder | 43
+Back In-Woo | 백인우 | Ulsan Hyundai FC | Midfielder | 72
+B. Michel | 벤지 | Ulsan Hyundai FC | Midfielder | 91
+Marcão | 말컹 | Ulsan Hyundai FC | Forward | 9
+Erick Farias | 에릭 | Ulsan Hyundai FC | Forward | 97
+Heo Yool | 허율 | Ulsan Hyundai FC | Forward | 18
+Jung Jae-Sang | 정재상 | Ulsan Hyundai FC | Forward | 20
+Yago Cariello | 야고 | Ulsan Hyundai FC | Forward | 99
+
+Lim Jun-Sub | 임준섭 | FC Seoul | Goalkeeper | 1
+Gu Sung-Yun | 구성윤 | FC Seoul | Goalkeeper | 25
+Kang Hyeon-Mu | 강현무 | FC Seoul | Goalkeeper | 31
+Yun Ki-Wook | 윤기욱 | FC Seoul | Goalkeeper | 71
+Lee Sang-Min | 이상민 | FC Seoul | Defender | 4
+Yazan Al Arab | 야잔 | FC Seoul | Defender | 5
+Choi Jun | 최준 | FC Seoul | Defender | 16
+Ahn Jae-Min | 안재민 | FC Seoul | Defender | 17
+Lee Han-Do | 이한도 | FC Seoul | Defender | 20
+Kim Jin-Su | 김진수 | FC Seoul | Defender | 22
+J. Ros | 로스 | FC Seoul | Defender | 37
+Park Seong-Hun | 박성훈 | FC Seoul | Defender | 40
+Park Soo-Il | 박수일 | FC Seoul | Defender | 66
+Kim Ji-Won | 김지원 | FC Seoul | Midfielder | 36
+H. Babec | 바베츠 | FC Seoul | Midfielder | 6
+Jeong Seung-Won | 정승원 | FC Seoul | Midfielder | 7
+Lee Seung-Mo | 이승모 | FC Seoul | Midfielder | 8
+Ko Pil-Gwan | 고필관 | FC Seoul | Midfielder | 23
+Hwang Do-Yoon | 황도윤 | FC Seoul | Midfielder | 41
+Son Jeong-Beom | 손정범 | FC Seoul | Midfielder | 42
+Park Jang Han-Gyeol | 박장한결 | FC Seoul | Midfielder | 88
+Anderson Oliveira | 안데르손 | FC Seoul | Midfielder | 10
+Moon Seon-Min | 문선민 | FC Seoul | Midfielder | 27
+Song Min-Kyu | 송민규 | FC Seoul | Midfielder | 34
+G. Samuel | 바또 | FC Seoul | Midfielder | 99
+P. Klimala | 클리말라 | FC Seoul | Forward | 9
+Cho Young-Wook | 조영욱 | FC Seoul | Forward | 18
+Cheon Seong-Hoon | 천성훈 | FC Seoul | Forward | 19
+L. Ruiz | 후이즈 | FC Seoul | Forward | 11
+
+Baek Jong-Beom | 백종범 | Gimcheon Sangmu FC | Goalkeeper | 1
+Moon Hyun-Ho | 문현호 | Gimcheon Sangmu FC | Goalkeeper | 37
+Park Man-Ho | 박만호 | Gimcheon Sangmu FC | Goalkeeper | 41
+Ahn Joon-Soo | 안준수 | Gimcheon Sangmu FC | Goalkeeper | 51
+Park Cheol-Woo | 박철우 | Gimcheon Sangmu FC | Defender | 3
+Kim Hyun-Woo | 김현우 | Gimcheon Sangmu FC | Defender | 4
+Kim Min-Kyu | 김민규 | Gimcheon Sangmu FC | Defender | 5
+Kim Tae-Hwan | 김태환 | Gimcheon Sangmu FC | Defender | 11
+Lee Chan-Ouk | 이찬욱 | Gimcheon Sangmu FC | Defender | 20
+Lee Jung-Taek | 이정택 | Gimcheon Sangmu FC | Defender | 26
+Park Jin-Seong | 박진성 | Gimcheon Sangmu FC | Defender | 33
+Hong Si-Hoo | 홍시후 | Gimcheon Sangmu FC | Defender | 42
+Kim Seo-Jin | 김서진 | Gimcheon Sangmu FC | Defender | 43
+Park Min-Seo | 박민서 | Gimcheon Sangmu FC | Defender | 44
+Byeon Jun-Soo | 변준수 | Gimcheon Sangmu FC | Defender | 45
+Yoon Jae-Seok | 윤재석 | Gimcheon Sangmu FC | Defender | 54
+Min Kyung-Hyun | 민경현 | Gimcheon Sangmu FC | Midfielder | 2
+Lee Soo-Bin | 이수빈 | Gimcheon Sangmu FC | Midfielder | 6
+Kim Yi-Seok | 김이석 | Gimcheon Sangmu FC | Midfielder | 8
+Park Se-Jin | 박세진 | Gimcheon Sangmu FC | Midfielder | 14
+Lim Dug-Keun | 임덕근 | Gimcheon Sangmu FC | Midfielder | 15
+Chung Ma-Ho | 정마호 | Gimcheon Sangmu FC | Midfielder | 46
+Roh Kyung-Ho | 노경호 | Gimcheon Sangmu FC | Midfielder | 53
+Park Tae-Jun | 박태준 | Gimcheon Sangmu FC | Midfielder | 55
+Lee Kang-Hyun | 이강현 | Gimcheon Sangmu FC | Midfielder | 56
+Go Jae-Hyeon | 고재현 | Gimcheon Sangmu FC | Midfielder | 7
+Jeon Byung-Kwan | 전병관 | Gimcheon Sangmu FC | Midfielder | 10
+Kim Joo-Chan | 김주찬 | Gimcheon Sangmu FC | Midfielder | 17
+Kim In-Gyun | 김인균 | Gimcheon Sangmu FC | Midfielder | 21
+Lee Sang-Heon | 이상헌 | Gimcheon Sangmu FC | Midfielder | 22
+Hong Yun-Sang | 홍윤상 | Gimcheon Sangmu FC | Midfielder | 48
+Kang Min-Geu | 강민규 | Gimcheon Sangmu FC | Midfielder | 49
+Kang Ju-Hyeok | 강주혁 | Gimcheon Sangmu FC | Midfielder | 50
+Park Yong-Hui | 박용희 | Gimcheon Sangmu FC | Midfielder | 58
+Lee Kun-Hee | 이건희 | Gimcheon Sangmu FC | Forward | 9
+Jung Jae-Min | 정재민 | Gimcheon Sangmu FC | Forward | 57
+
+Park Cheong-Hyo | 박청효 | Gangwon FC | Goalkeeper | 1
+Kim Jung-Hoon | 김정훈 | Gangwaon FC | Goalkeeper | 21
+Cho Min-Kyu | 조민규 | Gangwon FC | Goalkeeper | 51
+Hong Jin-Hyeok | 홍진혁 | Gangwon FC | Goalkeeper | 31
+Kim Yu-Sung | 김유성 | Gangwon FC | Goalkeeper | 41
+Jung Seong-Bin | 정승빈 | Gangwon FC | Defender | 3
+Lee Gi-Hyuk | 이기혁 | Gangwon FC | Defender | 13
+Jo Hyun-Tae | 조현태 | Gangwon FC | Defender | 20
+M. Tuci | 강투지 | Gangwon FC | Defender | 23
+Park Ho-Young | 박호영 | Gangwon FC | Defender | 24
+Lee Hyo-Bin | 이효빈 | Gangwon FC | Defender | 25
+Kim Do-Hyun | 김도현 | Gangwon FC | Defender | 27
+Hong Chul | 홍철 | Gangwon FC | Defender | 33
+Song Jun-Seok | 송준석 | Gangwon FC | Defender | 34
+Lee Jeong-Hyun | 이정현 | Gangwon FC | Defender | 45
+Kim Eo-Jin | 김어진 | Gangwon FC | Defender | 46
+Shin Min-Ha | 신민하 | Gangwon FC | Defender | 47
+Kang Joon-Hyuck | 강준혁 | Gangwon FC | Defender | 99
+Seo Min-Woo | 서민우 | Gangwon FC | Midfielder | 4
+Kim Dong-Hyun | 김동현 | Gangwon FC | Midfielder | 6
+Lee Seung-Won | 이승원 | Gangwon FC | Midfielder | 8
+Kang Yun-Gu | 강윤구 | Gangwon FC | Midfielder | 14
+Kim Tae-Hwan | 김태환 | Gangwon FC | Midfielder | 16
+Yeo Jun-Yeop | 여준엽 | Gangwon FC | Midfielder | 30
+Won Hee-Do | 원희도 | Gangwon FC | Midfielder | 40
+Lee Yong-Jae | 이용재 | Gangwon FC | Midfielder | 57
+Hwang Eun-Chong | 황은총 | Gangwon FC | Midfielder | 66
+Lee You-Hyeon | 이유현 | Gangwon FC | Midfielder | 97
+Kim Dae-Won | 김대원 | Gangwon FC | Midfielder | 7
+Mo Jae-Hyeon | 모재현 | Gangwon FC | Midfielder | 10
+Goh Young-Jun | 고영준 | Gangwon FC | Midfielder | 11
+Lee Eun-Ho | 이은호 | Gangwon FC | Midfielder | 17
+Cho Won-Woo | 조원우 | Gangwon FC | Midfielder | 26
+Lee Ji-Ho | 이지호 | Gangwon FC | Midfielder | 39
+Choe Byeong-Chan | 최병찬 | Gangwon FC | Midfielder | 96
+Choe Ji-Nam | 최지남 | Gangwon FC | Midfielder | 74
+Yoo Byung-Heon | 유병헌 | Gangwon FC | Forward | 22
+Abdallah Halaihal | 아부달라 | Gangwon FC | Forward | 77
+Kim Gun-Hee | 김건희 | Gangwon FC | Forward | 9
+Jin Jun-Seo | 진준서 | Gangwon FC | Forward | 15
+Park Sang-Hyeok | 박상혁 | Gangwon FC | Forward | 19
+
+Hwang In-Jae | 황인제 | Pohang Steelers | Goalkeeper | 21
+Yun Pyeong-Gook | 윤평국 | Pohang Steelers | Goalkeeper | 1
+Lee Seung-Hwan | 이승환 | Pohang Steelers | Goalkeeper | 23
+Hong Seong-Min | 홍성민 | Pohang Steelers | Goalkeeper | 29
+Kwon Neung | 권능 | Pohang Steelers | Goalkeeper | 91
+Cho Young-Jun | 조영준 | Pohang Steelers | Defender | 32
+Park Chan-Yong | 박찬용 | Pohang Steelers | Defender | 20
+Jeon Min-Gwang | 전민광| Pohang Steelers | Defender | 4
+Han Hyeon-Seo | 한현서 | Pohang Steelers | Defender | 24
+Jin Si-Woo | 진시우 | Pohang Steelers | Defender | 5
+Jo Sung-Wook | 조성욱 | Pohang Steelers | Defender | 33
+Yun Dae-Geun | 윤대근 | Pohang Steelers | Defender | 55
+Kim Ye-Sung | 김예성 | Pohang Steelers | Defender | 3
+Eo Jeong-Won | 어정원 | Pohang Steelers | Defender | 2
+Kang Min-Jun | 강민준 | Pohang Steelers | Defender | 13
+Shin Kwang-Hoon | 신광훈 | Pohang Steelers | Defender | 17
+Lee Chang-Woo | 이창우 | Pohang Steelers | Midfielder | 14
+K. Nishiya | 켄토 | Pohang Steelers | Midfielder | 31
+Ki Sung-yeung | 기성용 | Pohang Steelers | Midfielder | 40
+Kim Ho-Jin | 김호진 | Pohang Steelers | Midfielder | 36
+Kim Beom-Jun | 김범준 | Pohang Steelers | Midfielder | 26
+Kim Dong-Jin | 김동진 | Pohang Steelers | Midfielder | 16
+Kim Seung-Ho | 김승호 | Pohang Steelers | Midfielder | 8
+Hwang Seo-Woong | 황서웅 | Pohang Steelers | Midfielder | 70
+Lee Soo-Ah | 이수아 | Pohang Steelers | Midfielder | 47
+Kim In-Sung | 김인성 | Pohang Steelers | Midfielder | 7
+Wanderson | 완델손 | Pohang Steelers | Midfielder | 77
+Son Seung-Beom | 손승범 | Pohang Steelers | Midfielder | 28
+Lee Heon-Jae | 이헌재 | Pohang Steelers | Midfielder | 71
+Juninho Rocha | 주닝요 | Pohang Steelers | Midfielder | 11
+Kim Yong-Hak | 김용학 | Pohang Steelers | Midfielder | 30
+Hwang Jae-Hwan | 황재환 | Pohang Steelers | Midfielder | 12
+Lee Ho-Jae | 이호재 | Pohang Steelers | Forward | 19
+Jorge Luiz | 조르지 | Pohang Steelers | Forward | 25
+An Jae-Jun | 안재준 | Pohang Steelers | Forward | 9
+Cho Sang-Hyeok | 조상혁 | Pohang Steelers | Forward | 18
+J. Tranziska | 트란지스카 | Pohang Steelers | Forward | 10
+Jung Han-Min | 정한민 | Pohang Steelers | Midfielder | 37
+Baek Seung-Won | 백승원 | Pohang Steelers | Forward | 34
+
+Kim Dong-Heon | 김동헌 | Incheon United | Goalkeeper | 1
+Lee Tae-Heui | 이태희 | Incheon United | Goalkeeper | 21
+Lee Sang-hyeon | 이상현 | Incheon United | Goalkeeper | 31
+Wang Min-Jun | 왕민준 | Incheon United | Goalkeeper | 74
+Kim Gun-Hee | 김건희 | Incheon United | Defender | 4
+Juan Ibiza | 이비자 | Incheon United | Defender | 2
+Jeong Tae-Wook | 정태욱 | Incheon United | Defender | 25
+Park Kyung-Sub | 박경섭 | Incheon United | Defender | 20
+Kang Young-Hun | 강영훈 | Incheon United | Defender | 34
+Go Jung-Min | 고정민 | Incheon United | Defender | 22
+Lee Ju-Yong | 이주용 | Incheon United | Defender | 32
+Yeo Seung-Won | 여승원 | Incheon United | Defender | 27
+Kim Myung-Soon | 김명순 | Incheon United | Defender | 39
+Choi Seung-Gu | 최승구 | Incheon United | Defender | 13
+Lee Sang-Gi | 이상기 | Incheon United | Defender | 3
+Mun Ji-Hwan | 문지환 | Incheon United | Midfielder | 6
+Lee Jun-Seop | 이준섭 | Incheon United | Midfielder | 24
+Iker Undabarrena | 이케르 | Incheon United | Midfielder | 8
+Lee Myung-Joo | 이명주 | Incheon United | Midfielder | 5
+Seo Jae-Min | 서재민 | Incheon United | Midfielder | 15
+Jung Won-Jin | 정원진 | Incheon United | Midfielder | 88
+Oh Hu-Seong | 오후성 | Incheon United | Midfielder | 7
+Oh Jun-Yeop | 오준엽 | Incheon United | Midfielder | 55
+Gerso | 제르소 | Incheon United | Midfielder | 11
+Jeong Chi-In | 정치인 | Incheon United | Midfielder | 23
+Lee Dong-Ryul | 이동률 | Incheon United | Midfielder | 10
+Park Seung-Ho | 박승호 | Incheon United | Midfielder | 77
+Lee Chung-Yong | 이청용 | Incheon United | Midfielder | 72
+Kim Seong-Min | 김성민 | Incheon United | Midfielder | 17
+Baek Min-Kyu | 백민규 | Incheon United | Midfielder | 14
+Stefan Mugosa | 무고사 | Incheon United | Forward | 9
+Morgan Ferrier | 페리어 | Incheon United | Forward | 99
+Park Ho-Min | 박호민 | Incheon United | Forward | 19
+
+Kim Dong-Jun | 김동준 | Jeju United FC | Goalkeeper | 1
+An Chan-Gi | 안찬기 | Jeju United FC | Goalkeeper | 21
+Heo Jae-Won | 허재원 | Jeju United FC | Goalkeeper | 29
+Joo Seung-Min | 주승민 | Jeju United FC | Goalkeeper | 31
+Jang Min-Gyu | 장민규 | Jeju United FC | Defender | 20
+Rim Chang-Woo | 임창우 | Jeju United FC | Defender | 23
+Julien Célestine | 세레스틴 | Jeju United FC | Defender | 3
+Tobias Figueiredo | 토비아스 | Jeju United FC | Defender | 2
+Kim Jae-Woo | 김재우 | Jeju United FC | Defender | 41
+Heo Kang-Jun | 허강준 | Jeju United FC | Defender | 4
+Kwon Gi-Min | 권기민 | Jeju United FC | Defender | 6
+Kim Ryun-Seong | 김륜성 | Jeju United FC | Defender | 40
+Jeong Woon | 정운 | Jeju United FC | Defender | 13
+Jo In-Jung | 조인정 | Jeju United FC | Defender | 88
+Park Min-Jae | 박민재 | Jeju United FC | Midfielder | 47
+Yu In-Soo | 유인수 | Jeju United FC | Midfielder | 17
+Italo Moreira | 이탈로 | Jeju United FC | Midfielder | 5
+Kang Dong-Hwi | 강동휘 | Jeju United FC | Midfielder | 55
+Lee Chang-Min | 이창민 | Jeju United FC | Midfielder | 8
+Kim Geon-Woong | 김건웅 | Jeju United FC | Midfielder | 28
+Oh Jae-Hyeok | 오재혁 | Jeju United FC | Midfielder | 14
+Kim Jae-Min | 김재민 | Jeju United FC | Midfielder | 39
+Nam Tae-Hee | 남태희 | Jeju United FC | Midfielder | 10
+Park Chang-Jun | 박창준 | Jeju United FC | Midfielder | 7
+Kim Hyeon-Wu | 김현우 | Jeju United FC | Midfielder | 19
+Emerson Negueba | 네게바 | Jeju United FC | Midfielder | 94
+Kim Jun-Ha | 김준하 | Jeju United FC | Midfielder | 27
+Kwon Chang-Hoon | 권창훈 | Jeju United FC | Midfielder | 22
+Choi Byung-Wook | 최병욱 | Jeju United FC | Midfielder | 24
+Shin Sang-Eun | 신상은 | Jeju United FC | Midfielder | 11
+Yoo Seung-Jae| 유승재 | Jeju United FC | Midfielder | 77
+Gytis Paulauskas | 기티스 | Jeju United FC | Forward | 9
+Kim Sin-Jin | 김신진 | Jeju United FC | Forward | 18
+
+Kim Jeong-Hoon | 김정훈 | FC Anyang | Goalkeeper | 23
+Kim Tae-Hoon | 김태훈 | FC Anyang | Goalkeeper | 1
+Kim Da-Sol | 김다솔 | FC Anyang | Goalkeeper | 31
+Hwang Byeong-Geun | 황병근 | FC Anyang | Goalkeeper | 41
+Kim Sung-Dong | 김성동 | FC Anyang | Goalkeeper | 42
+T. Oude Kotte | 토마스 | FC Anyang | Defender | 55
+Kwon Kyung-Won | 권경원 | FC Anyang | Defender | 21
+Lee Chang-Yong | 이창용 | FC Anyang | Defender | 4
+Kim Young-Chan | 김영찬 | FC Anyang | Defender | 5
+Hong Jae-seok | 홍재석 | FC Anyang | Defender | 20
+Kim Ji-Hoon | 김지훈 | FC Anyang | Defender | 3
+Kim Dong-Jin | 김동진 | FC Anyang | Defender | 22
+Ju Hyun-Woo | 주현우 | FC Anyang | Defender | 99
+Kim Jae-hyeon | 김재현 | FC Anyang | Defender | 25
+Lee Tae-Hee | 이태희 | FC Anyang | Defender | 32
+Kim Min-Ho | 김민호 | FC Anyang | Defender | 37
+Jeong Jun-Yeon | 정준영 | FC Anyang | Defender | 89
+Lee Jin-Yong | 이진용 | FC Anyang | Midfielder | 26
+Kim Jung-Hyun | 김정현 | FC Anyang | Midfielder | 8
+Han Ka-ram | 한가람 | FC Anyang | Midfielder | 13
+Kang Ji-Wan | 강지완 | FC Anyang | Midfielder | 6
+Choe Gyu-Hyeon | 최규현 | FC Anyang | Midfielder | 6
+Matheus Oliveira | 마테우스 | FC Anyang | Midfielder | 7
+Kim Bo-Kyung | 김보경 | FC Anyang | Midfielder | 24
+York Rafael | 라파엘 | FC Anyang | Midfielder | 44
+Jang Jung-Woo | 장정우 | FC Anyang | Midfielder | 77
+Oh Hyeong-Jun | 오형준 | FC Anyang | Midfielder | 70
+Choi Geon-Joo | 최건주 | FC Anyang | Midfielder | 27
+Airton Moisés | 아일톤 | FC Anyang | Midfielder | 11
+Ivan Jukic | 유키치 | FC Anyang | Midfielder | 10
+Moon Seong-Woo | 문성우 | FC Anyang | Midfielder | 14
+Park Jeong-Hun | 박정훈 | FC Anyang | Midfielder | 15
+Choe Hyun-Woo | 최현우 | FC Anyang | Midfielder | 71
+Kang Ji-Hoon | 강지훈 | FC Anyang | Midfielder | 17
+Breno Herculano | 엘쿠라노 | FC Anyang | Forward | 9
+Kim Un | 김운 | FC Anyang | Forward | 19
+Kim Kang | 김강 | FC Anyang | Forward | 47
+
+Kim Hyeong-Keun | 김형근 | Bucheon FC 1995 | Goalkeeper | 1
+Kim Hyeon-Yeob | 김현엽 | Bucheon FC 1995 | Goalkeeper | 21
+Kim Chan-Young | 김찬영 | Bucheon FC 1995 | Goalkeeper | 50
+Patrick William | 패트릭 | Bucheon FC 1995 | Defender | 3
+Lee Sang-Hyeok | 이상혁 | Bucheon FC 1995 | Defender | 5
+Hong Sung-Wook | 홍성욱 | Bucheon FC 1995 | Defender | 20
+Baek Dong-Gyu | 백동규 | Bucheon FC 1995 | Defender | 29
+Lee Jae-Won | 이재원 | Bucheon FC 1995 | Defender | 93
+Kim Jong-Min | 김종민 | Bucheon FC 1995 | Defender | 2
+Lee Ye-Chan | 이예찬 | Bucheon FC 1995 | Defender | 44
+Shin Jae-Won| 신재원 | Bucheon FC 1995 | Defender | 77
+An Tae-Hyun | 안태현 | Bucheon FC 1995 | Defender | 26
+Yu Seung-Hyun | 유승현 | Bucheon FC 1995 | Defender | 66
+Yeo Bong-Hun | 여봉훈 | Bucheon FC 1995 | Defender | 25
+Thiaguinho Santos | 티아깅요 | Bucheon FC 1995 | Defender | 7
+Jeong Ho-Jin | 정호진 | Bucheon FC 1995 | Midfielder | 6
+Choe Won-Cheol | 최원철 | Bucheon FC 1995 | Midfielder | 4
+Kim Sang-Jun | 김상준 | Bucheon FC 1995 | Midfielder | 16
+Yoon Bit-Garam | 윤빛가람 | Bucheon FC 1995 | Midfielder | 8
+Kazuki Takahashi | 카즈 | Bucheon FC 1995 | Midfielder | 23
+Kim Jong-Woo | 김종우 | Bucheon FC 1995 | Midfielder | 14
+Kang Jae-Woo | 강재우 | Bucheon FC 1995 | Midfielder | 88
+Rodrigo Bassani | 바사니 | Bucheon FC 1995 | Midfielder | 10
+Kim Dong-Hyun | 김동현 | Bucheon FC 1995 | Midfielder | 24
+Seong Shin | 성신 | Bucheon FC 1995 | Midfielder | 19
+Jefferson Galego | 갈레고 | Bucheon FC 1995 | Midfielder | 11
+Kim Seung-Bin | 김승빈 | Bucheon FC 1995 | Midfielder | 71
+Kim Kyu-Min | 김규민 | Bucheon FC 1995 | Midfielder | 17
+Han Ji-Ho | 한지호 | Bucheon FC 1995 | Midfielder | 22
+Kim Min-Jun | 김민준 | Bucheon FC 1995 | Midfielder | 13
+Lee Chung-Hyun | 이충현 | Bucheon FC 1995 | Midfielder | 30
+Lee Eui-Hyeong | 이의형 | Bucheon FC 1995 | Forward | 18
+Victor Gabriel | 가브리엘 | Bucheon FC 1995 | Forward | 63
+John Montaño | 몬타뇨 | Bucheon FC 1995 | Forward | 9
+Uh Dam | 어담 | Bucheon FC 1995 | Forward | 27
+
+Kim Kyeong-Min | 김경민 | Gwangju FC | Goalkeeper | 1
+Roh Hee-Dong | 노희동 | Gwangju FC | Goalkeeper | 21
+Kim Dong-Hwa | 김동화 | Gwangju FC | Goalkeeper | 23
+Lee Yoon-Sung | 이윤성 | Gwangju FC | Goalkeeper | 71
+Min Sang-Gi | 민상기 | Gwangju FC | Defender | 39
+Ahn Young-Kyu | 안영규 | Gwangju FC | Defender | 6
+Kwak Sung-Hun | 곽성훈 | Gwangju FC | Defender | 15
+Kim Yong-Hyuk | 김용혁  | Gwangju FC | Defender | 24
+Gong Bae-Hyeon | 공배현 | Gwangju FC | Defender | 26
+Lee Min-Gi | 이민기 | Gwangju FC | Defender | 3
+Kim Jin-Ho | 김진호 | Gwangju FC | Defender | 27
+Park Won-Jae | 박원재 | Gwangju FC | Defender | 33
+Ju Se-Jong | 주세종 | Gwangju FC | Midfielder | 8
+Moon Min-seo | 문민서 | Gwangju FC | Midfielder | 88
+Yu Je-Ho | 유제호 | Gwangju FC | Midfielder | 14
+Kang Hui-Su | 강희수 | Gwangju FC | Midfielder | 42
+Jung Gyu-Min | 정규민 | Gwangju FC | Midfielder | 79
+Choi Kyoung-Rok | 최경록 | Gwangju FC | Midfielder | 10
+Jung Ji-Hun | 정지훈 | Gwangju FC | Midfielder | 16
+Park Jeong-In | 박정인 | Gwangju FC | Midfielder | 13
+Hong Yong-Jun | 홍용준 | Gwangju FC | Midfielder | 99
+Ha Seung-Un | 하승운 | Gwangju FC | Midfielder | 9
+Kwon Sung-Yun | 권성윤 | Gwangju FC | Midfielder | 22
+Ahn Hyeok-Ju | 안혁주 | Gwangju FC | Midfielder | 30
+Shin Chang-Moo | 신창무 | Gwangju FC | Midfielder | 40
+Oh Ha-Jong | 오하종 | Gwangju FC | Midfielder | 77
+Kim Yun-Ho | 김윤호 | Gwangju FC | Forward | 25
+Hólmbert Aron Fridjónsson | 프리드욘슨 | Gwangju FC | Forward | 11

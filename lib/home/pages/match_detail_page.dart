@@ -2,6 +2,7 @@ part of '../home_page.dart';
 
 class MatchDetailPage extends StatefulWidget {
   final bool isSoccer;
+  final _JoinedDraft? draft;
   final _MatchSection? initialSection;
   final double? overrideHomeScore;
   final double? overrideAwayScore;
@@ -9,6 +10,7 @@ class MatchDetailPage extends StatefulWidget {
   const MatchDetailPage({
     super.key,
     required this.isSoccer,
+    this.draft,
     this.initialSection,
     this.overrideHomeScore,
     this.overrideAwayScore,
@@ -102,8 +104,11 @@ String? _formationKeyForCounts({
   return null;
 }
 
-bool _isAllowedFormationCounts({required int df, required int mf, required int fw}) =>
-    _formationKeyForCounts(df: df, mf: mf, fw: fw) != null;
+bool _isAllowedFormationCounts({
+  required int df,
+  required int mf,
+  required int fw,
+}) => _formationKeyForCounts(df: df, mf: mf, fw: fw) != null;
 
 bool _isValidStartingXI(List<_PlayerSlot> starting) {
   if (starting.length != 11) return false;
@@ -118,12 +123,26 @@ bool _isValidStartingXI(List<_PlayerSlot> starting) {
   return _isAllowedFormationCounts(df: df, mf: mf, fw: fw);
 }
 
+List<_Player> _rowsFromSoccerStartingSlots(List<_PlayerSlot> starting) {
+  final gk = starting.where((p) => p.position == 'GK').toList();
+  final df = starting.where((p) => p.position == 'DF').toList();
+  final mf = starting.where((p) => p.position == 'MF').toList();
+  final fw = starting.where((p) => p.position == 'FW').toList();
+  return [
+    if (gk.isNotEmpty) _Player(slots: [gk.first]),
+    if (df.isNotEmpty) _Player(slots: df),
+    if (mf.isNotEmpty) _Player(slots: mf),
+    if (fw.isNotEmpty) _Player(slots: fw),
+  ];
+}
+
 List<_PlayerSlot> _buildPlayerPool(Random random) {
   // Use ONLY the updated roster-document players for MatchDetailPage.
   final result = <_PlayerSlot>[];
   for (final e in _docMetaByName.entries) {
-    final seed =
-        _stableSeedFromKey('pts|${e.key}|${e.value.club}|${e.value.number}');
+    final seed = _stableSeedFromKey(
+      'pts|${e.key}|${e.value.club}|${e.value.number}',
+    );
     result.add(
       _PlayerSlot(
         name: e.key,
@@ -154,6 +173,7 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
     final seed = name.codeUnits.fold<int>(0, (p, e) => p + e);
     return (seed % 100) < 15;
   }
+
   List<_PlayerSlot> _starting = [];
   List<_PlayerSlot> _bench = [];
 
@@ -171,21 +191,23 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
 
   Future<void> _trySignFreeAgent(_PlayerSlot fa) async {
     final ownership =
-        _MatchDetailPageState._playerOwnerCache[fa.name] ?? PlayerOwnership.freeAgent;
+        _MatchDetailPageState._playerOwnerCache[fa.name] ??
+        PlayerOwnership.freeAgent;
     if (ownership != PlayerOwnership.freeAgent) return;
 
     // If roster is not full (shouldn't happen often in this demo), just add to bench.
     if (_myRosterCount < 18) {
       setState(() {
         _bench.add(fa);
-        _MatchDetailPageState._playerOwnerCache[fa.name] = PlayerOwnership.myTeam;
+        _MatchDetailPageState._playerOwnerCache[fa.name] =
+            PlayerOwnership.myTeam;
         _persistMyRosterToCache();
         _applyStartingToLineup();
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${fa.name} 선수를 영입했습니다.')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${fa.name} 선수를 영입했습니다.')));
       }
       return;
     }
@@ -198,8 +220,9 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
       builder: (ctx) {
         final theme = Theme.of(ctx);
         final isDark = theme.brightness == Brightness.dark;
-        final Color surface =
-            isDark ? const Color.fromARGB(255, 30, 30, 30) : theme.cardColor;
+        final Color surface = isDark
+            ? const Color.fromARGB(255, 30, 30, 30)
+            : theme.cardColor;
         final Color border = isDark ? Colors.white12 : Colors.black12;
         final Color text = isDark ? Colors.white : Colors.black87;
         final Color muted = isDark ? Colors.white70 : Colors.black54;
@@ -360,8 +383,9 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
       builder: (ctx) {
         final theme = Theme.of(ctx);
         final isDark = theme.brightness == Brightness.dark;
-        final Color surface =
-            isDark ? const Color.fromARGB(255, 30, 30, 30) : theme.cardColor;
+        final Color surface = isDark
+            ? const Color.fromARGB(255, 30, 30, 30)
+            : theme.cardColor;
         final Color border = isDark ? Colors.white12 : Colors.black12;
         final Color text = isDark ? Colors.white : Colors.black87;
         final Color muted = isDark ? Colors.white70 : Colors.black54;
@@ -463,7 +487,8 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
   }
 
   Future<void> _requestTrade(_PlayerSlot target) async {
-    final own = _MatchDetailPageState._playerOwnerCache[target.name] ??
+    final own =
+        _MatchDetailPageState._playerOwnerCache[target.name] ??
         PlayerOwnership.freeAgent;
     if (own != PlayerOwnership.otherTeam) return;
 
@@ -475,7 +500,9 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${offered.name} ↔ ${target.name} 트레이드 요청을 보냈습니다.')),
+      SnackBar(
+        content: Text('${offered.name} ↔ ${target.name} 트레이드 요청을 보냈습니다.'),
+      ),
     );
   }
 
@@ -496,11 +523,8 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
     final int dfCount = dfs.length;
     final int mfCount = mfs.length;
     final int fwCount = fws.length;
-    final formationName = _formationKeyForCounts(
-          df: dfCount,
-          mf: mfCount,
-          fw: fwCount,
-        ) ??
+    final formationName =
+        _formationKeyForCounts(df: dfCount, mf: mfCount, fw: fwCount) ??
         _lineup!.homeFormation;
 
     // Build home rows in GK -> DF -> MF -> FW order (Matchup view expects this).
@@ -511,22 +535,46 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
     final fwSlots = List<_PlayerSlot>.from(fws);
 
     final newHome = <_Player>[
-      _Player(slots: [
-        _PlayerSlot(name: gkSlot.name, score: gkSlot.score, position: gkSlot.position),
-      ]),
+      _Player(
+        slots: [
+          _PlayerSlot(
+            name: gkSlot.name,
+            score: gkSlot.score,
+            position: gkSlot.position,
+          ),
+        ],
+      ),
       _Player(
         slots: dfSlots
-            .map((p) => _PlayerSlot(name: p.name, score: p.score, position: p.position))
+            .map(
+              (p) => _PlayerSlot(
+                name: p.name,
+                score: p.score,
+                position: p.position,
+              ),
+            )
             .toList(),
       ),
       _Player(
         slots: mfSlots
-            .map((p) => _PlayerSlot(name: p.name, score: p.score, position: p.position))
+            .map(
+              (p) => _PlayerSlot(
+                name: p.name,
+                score: p.score,
+                position: p.position,
+              ),
+            )
             .toList(),
       ),
       _Player(
         slots: fwSlots
-            .map((p) => _PlayerSlot(name: p.name, score: p.score, position: p.position))
+            .map(
+              (p) => _PlayerSlot(
+                name: p.name,
+                score: p.score,
+                position: p.position,
+              ),
+            )
             .toList(),
       ),
     ];
@@ -587,14 +635,17 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
     _cachedSoccerPlayers ??= _buildPlayerPool(Random(0));
     final pool = _cachedSoccerPlayers ?? const <_PlayerSlot>[];
     final startingNames = starting.map((e) => e.name).toSet();
-    final candidates =
-        pool.where((p) => !startingNames.contains(p.name)).toList();
+    final candidates = pool
+        .where((p) => !startingNames.contains(p.name))
+        .toList();
     candidates.shuffle(Random(_stableSeedFromKey('$key|bench')));
-    final bench = candidates.take(7).map((p) => _PlayerSlot(
-          name: p.name,
-          score: p.score,
-          position: p.position,
-        )).toList();
+    final bench = candidates
+        .take(7)
+        .map(
+          (p) =>
+              _PlayerSlot(name: p.name, score: p.score, position: p.position),
+        )
+        .toList();
     _cachedTeamBenches[key] = bench;
     return List<_PlayerSlot>.from(bench);
   }
@@ -654,20 +705,242 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
   final GlobalKey<_LeagueItSubAppBarState> _appBarKey =
       GlobalKey<_LeagueItSubAppBarState>();
   bool _isMyPageOpen = false;
+  bool _isResolvingFantasyDraft = false;
   late _MatchSection _section;
   _LineupData? _lineup;
-  late final List<_PlayerSlot> _allPlayers;
+  List<_PlayerSlot> _allPlayers = const [];
   String _playerSearch = '';
   bool _showOnlyFreeAgents = false;
+  _FantasyMatchupView? _fantasyMatchup;
+  _FantasyTeamState? _fantasyMyTeam;
+  _JoinedDraft? _resolvedFantasyDraft;
+  _JoinedDraft? get _fantasyDraft => _resolvedFantasyDraft;
+
+  _JoinedDraft? _findReadyFantasyDraft() {
+    final direct = widget.draft;
+    if (direct != null && direct.fantasyReady) {
+      return direct;
+    }
+
+    final homeState = homeKey.currentState;
+    if (homeState == null) return null;
+
+    final primary = homeState.fantasyDraftForSport(widget.isSoccer);
+    if (primary != null && primary.fantasyReady) {
+      return primary;
+    }
+
+    final candidates =
+        homeState.joinedDrafts
+            .where(
+              (draft) =>
+                  draft.isSoccer == widget.isSoccer && draft.fantasyReady,
+            )
+            .toList()
+          ..sort((a, b) => a.when.compareTo(b.when));
+    if (candidates.isEmpty) return null;
+    return candidates.first;
+  }
+
+  _JoinedDraft? _findRecoverableFantasyDraft() {
+    final homeState = homeKey.currentState;
+    if (homeState == null) return null;
+    final candidates =
+        homeState.joinedDrafts
+            .where((draft) => draft.isSoccer == widget.isSoccer)
+            .toList()
+          ..sort((a, b) => a.when.compareTo(b.when));
+    for (final draft in candidates) {
+      if (homeState._shouldRecoverFantasyLeague(draft)) {
+        return draft;
+      }
+    }
+    return null;
+  }
+
+  void _applyFantasyDraft(_JoinedDraft draft) {
+    _resolvedFantasyDraft = draft;
+    _initFantasyMode(draft);
+  }
+
+  Future<void> _refreshFantasySoccerScoresAndRebuild() async {
+    if (!widget.isSoccer) return;
+    final draft = _fantasyDraft;
+    final homeState = homeKey.currentState;
+    if (draft == null || homeState == null) return;
+    await homeState._refreshFantasySoccerScores();
+    final ready = _findReadyFantasyDraft() ?? draft;
+    if (!mounted) return;
+    setState(() {
+      _applyFantasyDraft(ready);
+    });
+  }
+
+  Future<void> _resolveFantasyDraft() async {
+    final ready = _findReadyFantasyDraft();
+    if (ready != null) {
+      if (!mounted) return;
+      setState(() {
+        _applyFantasyDraft(ready);
+      });
+      unawaited(_refreshFantasySoccerScoresAndRebuild());
+      return;
+    }
+
+    final recoverable = _findRecoverableFantasyDraft();
+    final homeState = homeKey.currentState;
+    if (recoverable == null || homeState == null) return;
+
+    if (mounted) {
+      setState(() {
+        _isResolvingFantasyDraft = true;
+      });
+    }
+
+    await homeState._recoverFantasyLeagueState(recoverable);
+    final recovered = _findReadyFantasyDraft();
+    if (!mounted) return;
+    setState(() {
+      if (recovered != null) {
+        _applyFantasyDraft(recovered);
+      }
+      _isResolvingFantasyDraft = false;
+    });
+    if (recovered != null) {
+      unawaited(_refreshFantasySoccerScoresAndRebuild());
+    }
+  }
+
+  _LineupData _buildFantasySoccerLineup(_FantasyMatchupView matchup) {
+    List<_Player> rowsFrom(
+      _FantasyTeamState team,
+      List<_FantasyTeamPlayer> players,
+    ) {
+      _PlayerSlot slotFrom(_FantasyTeamPlayer player) {
+        final score = _fantasyPlayerRoundScore(
+          player,
+          matchup.round,
+          isSoccer: true,
+          draft: matchup.draft,
+          team: team,
+        );
+        return _PlayerSlot(
+          name: player.name,
+          score: score.round(),
+          position: player.position,
+        );
+      }
+
+      final gk = players.where((p) => p.position == 'GK').take(1).toList();
+      final dfs = players.where((p) => p.position == 'DF').toList();
+      final mfs = players.where((p) => p.position == 'MF').toList();
+      final fws = players.where((p) => p.position == 'FW').toList();
+      return [
+        _Player(slots: gk.map(slotFrom).toList()),
+        _Player(slots: dfs.map(slotFrom).toList()),
+        _Player(slots: mfs.map(slotFrom).toList()),
+        _Player(slots: fws.map(slotFrom).toList()),
+      ];
+    }
+
+    final homeRows = rowsFrom(matchup.myTeam, matchup.myTeam.starting);
+    final awayBaseRows = rowsFrom(matchup.opponent, matchup.opponent.starting);
+    final awayRows = awayBaseRows.reversed.toList();
+    final homeFormation =
+        _formationKeyForCounts(
+          df: matchup.myTeam.starting.where((p) => p.position == 'DF').length,
+          mf: matchup.myTeam.starting.where((p) => p.position == 'MF').length,
+          fw: matchup.myTeam.starting.where((p) => p.position == 'FW').length,
+        ) ??
+        '4-3-3';
+    final awayFormation =
+        _formationKeyForCounts(
+          df: matchup.opponent.starting.where((p) => p.position == 'DF').length,
+          mf: matchup.opponent.starting.where((p) => p.position == 'MF').length,
+          fw: matchup.opponent.starting.where((p) => p.position == 'FW').length,
+        ) ??
+        '4-3-3';
+    return _LineupData(
+      home: homeRows,
+      away: awayRows,
+      homeScore: matchup.myScore.round(),
+      awayScore: matchup.opponentScore.round(),
+      homeFormation: homeFormation,
+      awayFormation: awayFormation,
+    );
+  }
+
+  List<_PlayerSlot> _buildFantasyAllPlayers(_JoinedDraft draft) {
+    final players = <_PlayerSlot>[];
+    for (final team in draft.fantasyTeams) {
+      for (final player in team.roster) {
+        players.add(player.toPlayerSlot());
+      }
+    }
+    return players;
+  }
+
+  void _initFantasyMode(_JoinedDraft draft) {
+    _fantasyMatchup = _currentFantasyMatchupForDraft(draft);
+    if (_fantasyMatchup != null) {
+      _fantasyMyTeam = _fantasyMatchup!.myTeam;
+      _starting = _fantasyMatchup!.myTeam.starting
+          .map((player) => player.toPlayerSlot())
+          .toList();
+      _bench = _fantasyMatchup!.myTeam.bench
+          .map((player) => player.toPlayerSlot())
+          .toList();
+      if (draft.isSoccer) {
+        _lineup = _buildFantasySoccerLineup(_fantasyMatchup!);
+      } else {
+        _lineup = null;
+      }
+    } else {
+      _fantasyMyTeam = draft.fantasyTeams.isEmpty
+          ? null
+          : draft.fantasyTeams.first;
+      _starting =
+          _fantasyMyTeam?.starting
+              .map((player) => player.toPlayerSlot())
+              .toList() ??
+          [];
+      _bench =
+          _fantasyMyTeam?.bench
+              .map((player) => player.toPlayerSlot())
+              .toList() ??
+          [];
+      _lineup = null;
+    }
+    _allPlayers = _buildFantasyAllPlayers(draft);
+    _playerOwnerCache.clear();
+    for (final player in _allPlayers) {
+      _playerOwnerCache[player.name] = PlayerOwnership.freeAgent;
+    }
+    for (final team in draft.fantasyTeams) {
+      for (final player in team.roster) {
+        _playerOwnerCache[player.name] =
+            team.teamName == _fantasyMyTeam?.teamName
+            ? PlayerOwnership.myTeam
+            : PlayerOwnership.otherTeam;
+      }
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _section = widget.initialSection ?? _MatchSection.matchup;
+    final readyDraft = _findReadyFantasyDraft();
+    if (readyDraft != null) {
+      _applyFantasyDraft(readyDraft);
+      return;
+    }
+    unawaited(_resolveFantasyDraft());
     final random = Random();
     if (widget.isSoccer) {
       _lineup =
-          _cachedSoccerLineup ?? _generateLineup(isSoccer: true, random: random);
+          _cachedSoccerLineup ??
+          _generateLineup(isSoccer: true, random: random);
       if (_lineup != null) {
         _lineup = _recomputeLineupScoreTotals(_lineup!);
       }
@@ -688,10 +961,8 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
   void _assignOwnership(Random random) {
     // 1) 내 로스터(18)는 최초 1회만 생성하고 계속 유지
     if (_myTeamRosterOrder.isEmpty) {
-      final starting = _lineup?.home
-              .expand((p) => p.slots)
-              .map((s) => s.name)
-              .toList() ??
+      final starting =
+          _lineup?.home.expand((p) => p.slots).map((s) => s.name).toList() ??
           [];
       _myTeamRosterOrder
         ..clear()
@@ -700,12 +971,12 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
         ..clear()
         ..addAll(starting);
 
-      final benchCandidates = _allPlayers
-          .where((p) => !_myTeamRosterSet.contains(p.name))
-          .toList()
-        ..shuffle(random);
-      for (final p
-          in benchCandidates.take(max(0, 18 - _myTeamRosterOrder.length))) {
+      final benchCandidates =
+          _allPlayers.where((p) => !_myTeamRosterSet.contains(p.name)).toList()
+            ..shuffle(random);
+      for (final p in benchCandidates.take(
+        max(0, 18 - _myTeamRosterOrder.length),
+      )) {
         _myTeamRosterOrder.add(p.name);
         _myTeamRosterSet.add(p.name);
       }
@@ -717,11 +988,8 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
     }
 
     // 3) 상대 라인업은 다른 팀 소유(내 팀으로 고정된 선수는 덮어쓰지 않음)
-    final awayNames = _lineup?.away
-            .expand((p) => p.slots)
-            .map((s) => s.name)
-            .toList() ??
-        [];
+    final awayNames =
+        _lineup?.away.expand((p) => p.slots).map((s) => s.name).toList() ?? [];
     for (final n in awayNames) {
       if (_playerOwnerCache[n] == PlayerOwnership.myTeam) continue;
       _playerOwnerCache[n] = PlayerOwnership.otherTeam;
@@ -730,8 +998,9 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
     // 4) 나머지는 결정론적으로 FA/다른 팀으로 고정
     for (final p in _allPlayers) {
       if (_playerOwnerCache.containsKey(p.name)) continue;
-      _playerOwnerCache[p.name] =
-          _isFreeAgent(p.name) ? PlayerOwnership.freeAgent : PlayerOwnership.otherTeam;
+      _playerOwnerCache[p.name] = _isFreeAgent(p.name)
+          ? PlayerOwnership.freeAgent
+          : PlayerOwnership.otherTeam;
     }
   }
 
@@ -745,8 +1014,10 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
         : ownedPlayers.map((p) => p.name).toList();
     final ordered = <_PlayerSlot>[];
     for (final n in orderedNames) {
-      final hit =
-          ownedPlayers.firstWhere((p) => p.name == n, orElse: () => _PlayerSlot(name: n, score: 0, position: 'FW'));
+      final hit = ownedPlayers.firstWhere(
+        (p) => p.name == n,
+        orElse: () => _PlayerSlot(name: n, score: 0, position: 'FW'),
+      );
       if (!ordered.contains(hit)) ordered.add(hit);
     }
     // 부족하면 채우기
@@ -758,9 +1029,929 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
     _applyStartingToLineup();
   }
 
+  List<({String team, int wins, int losses, int ties, double points})>
+  _fantasyStandings(_JoinedDraft draft) {
+    final currentRound = _currentFantasyRoundAt(draft, DateTime.now());
+    final stats = {
+      for (final team in draft.fantasyTeams)
+        team.teamName: (
+          team: team.teamName,
+          wins: 0,
+          losses: 0,
+          ties: 0,
+          points: 0.0,
+        ),
+    };
+    final byName = {for (final team in draft.fantasyTeams) team.teamName: team};
+    for (final matchup in draft.fantasySchedule.where(
+      (m) => m.round <= currentRound,
+    )) {
+      final home = byName[matchup.homeTeam];
+      final away = byName[matchup.awayTeam];
+      if (home == null || away == null) continue;
+      final homeScore = _fantasyTeamRoundScore(
+        home,
+        matchup.round,
+        isSoccer: draft.isSoccer,
+        draft: draft,
+      );
+      final awayScore = _fantasyTeamRoundScore(
+        away,
+        matchup.round,
+        isSoccer: draft.isSoccer,
+        draft: draft,
+      );
+      final homeStat = stats[home.teamName]!;
+      final awayStat = stats[away.teamName]!;
+      stats[home.teamName] = (
+        team: homeStat.team,
+        wins: homeStat.wins + (homeScore > awayScore ? 1 : 0),
+        losses: homeStat.losses + (homeScore < awayScore ? 1 : 0),
+        ties: homeStat.ties + (homeScore == awayScore ? 1 : 0),
+        points: homeStat.points + homeScore,
+      );
+      stats[away.teamName] = (
+        team: awayStat.team,
+        wins: awayStat.wins + (awayScore > homeScore ? 1 : 0),
+        losses: awayStat.losses + (awayScore < homeScore ? 1 : 0),
+        ties: awayStat.ties + (awayScore == homeScore ? 1 : 0),
+        points: awayStat.points + awayScore,
+      );
+    }
+    final rows = stats.values.toList();
+    rows.sort((a, b) {
+      final winCompare = b.wins.compareTo(a.wins);
+      if (winCompare != 0) return winCompare;
+      return b.points.compareTo(a.points);
+    });
+    return rows;
+  }
+
+  double _fantasyProjectedPlayerScore(_FantasyTeamPlayer player) {
+    return widget.isSoccer ? player.score * 1.8 : player.score * 3.6;
+  }
+
+  double _fantasyProjectedTeamScore(_FantasyTeamState team) {
+    return team.starting.fold<double>(
+      0,
+      (total, player) => total + _fantasyProjectedPlayerScore(player),
+    );
+  }
+
+  String _formatFantasyBadgeScore(double value) {
+    final rounded = value.toStringAsFixed(1);
+    if (rounded.endsWith('.0')) {
+      return rounded.substring(0, rounded.length - 2);
+    }
+    return rounded;
+  }
+
+  double _fantasySoccerCurrentPlayerScore(
+    _JoinedDraft draft,
+    _FantasyTeamState team,
+    _FantasyTeamPlayer player,
+    int round,
+  ) {
+    return _fantasyPlayerRoundScore(
+      player,
+      round,
+      isSoccer: true,
+      draft: draft,
+      team: team,
+    );
+  }
+
+  double _fantasySoccerBasePlayerScore(
+    _JoinedDraft draft,
+    _FantasyTeamState team,
+    _FantasyTeamPlayer player,
+    int round,
+  ) {
+    return _fantasySoccerBasePlayerRoundScore(draft, team, player.name, round);
+  }
+
+  double _fantasySlotDisplayScore(_PlayerSlot slot) {
+    if (!widget.isSoccer || _fantasyDraft == null || _fantasyMyTeam == null) {
+      return _fantasyProjectedSlotScore(slot, isSoccer: widget.isSoccer);
+    }
+    final round = _currentFantasyRoundAt(_fantasyDraft!, DateTime.now());
+    return _fantasySoccerDisplayedPlayerRoundScore(
+      _fantasyDraft!,
+      _fantasyMyTeam!,
+      slot.name,
+      round,
+    );
+  }
+
+  Widget _fantasyTeamSummary({required _FantasyTeamState team}) {
+    final branding = _fantasyTeamBrandingFor(
+      uid: team.uid,
+      teamName: team.teamName,
+    );
+    return Column(
+      children: [
+        Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: branding.tint,
+            border: Border.all(color: Colors.black12),
+          ),
+          child: Icon(
+            branding.icon,
+            size: 24,
+            color: _FantasyTeamBranding.defaultIconColor,
+          ),
+        ),
+        const SizedBox(height: 4),
+        SizedBox(
+          width: 78,
+          child: Text(
+            team.teamName,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _fantasyStartingList({
+    String? title,
+    required List<_FantasyTeamPlayer> players,
+    required int round,
+    required _JoinedDraft draft,
+    required _FantasyTeamState team,
+  }) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title != null) ...[
+            Text(
+              title,
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+            ),
+            const SizedBox(height: 8),
+          ],
+          ...players.map((player) {
+            final current = widget.isSoccer
+                ? _fantasySoccerCurrentPlayerScore(draft, team, player, round)
+                : _fantasyPlayerRoundScore(
+                    player,
+                    round,
+                    isSoccer: false,
+                    draft: draft,
+                    team: team,
+                  );
+            final projected = widget.isSoccer
+                ? _fantasySoccerBasePlayerScore(draft, team, player, round)
+                : _fantasyProjectedPlayerScore(player);
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: Colors.black12),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          player.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          projected.toStringAsFixed(1),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF6D6D6D),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFE9F0FF),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      _formatFantasyBadgeScore(current),
+                      style: const TextStyle(
+                        color: Color(0xFF2D6DFF),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _fantasyBenchColumns({
+    required _FantasyMatchupView matchup,
+    required int round,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8F8F8),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.black12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '교체명단',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _fantasyStartingList(
+                  players: matchup.myTeam.bench,
+                  round: round,
+                  draft: matchup.draft,
+                  team: matchup.myTeam,
+                ),
+                Container(
+                  width: 1,
+                  margin: const EdgeInsets.symmetric(horizontal: 14),
+                  color: Colors.black12,
+                ),
+                _fantasyStartingList(
+                  players: matchup.opponent.bench,
+                  round: round,
+                  draft: matchup.draft,
+                  team: matchup.opponent,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFantasySectionContent(_JoinedDraft draft) {
+    switch (_section) {
+      case _MatchSection.matchup:
+        final matchup = _fantasyMatchup;
+        if (matchup == null) {
+          return _comingSoonCard('현재 라운드 매치업이 아직 없습니다.');
+        }
+        final total = matchup.myScore + matchup.opponentScore;
+        final homeRatio = total <= 0 ? 0.5 : matchup.myScore / total;
+        final myProjected = widget.isSoccer
+            ? matchup.myScore
+            : _fantasyProjectedTeamScore(matchup.myTeam);
+        final opponentProjected = widget.isSoccer
+            ? matchup.opponentScore
+            : _fantasyProjectedTeamScore(matchup.opponent);
+        final fantasySoccerLineup = widget.isSoccer
+            ? _buildFantasySoccerLineup(matchup)
+            : null;
+        final myRosterNames = matchup.myTeam.roster.map((p) => p.name).toSet();
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: _fantasyTeamSummary(team: matchup.myTeam),
+                ),
+                Expanded(
+                  flex: 3,
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: Column(
+                      children: [
+                        SizedBox(
+                          height: 34,
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Expanded(
+                                child: Align(
+                                  alignment: Alignment.centerRight,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      matchup.myScore.toStringAsFixed(1),
+                                      maxLines: 1,
+                                      textAlign: TextAlign.right,
+                                      style: const TextStyle(
+                                        fontSize: 26,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: -0.8,
+                                        fontFeatures: [
+                                          FontFeature.tabularFigures(),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(
+                                width: 22,
+                                child: Center(
+                                  child: Text(
+                                    ':',
+                                    style: TextStyle(
+                                      fontSize: 26,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: -0.8,
+                                      fontFeatures: [
+                                        FontFeature.tabularFigures(),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Text(
+                                      matchup.opponentScore.toStringAsFixed(1),
+                                      maxLines: 1,
+                                      textAlign: TextAlign.left,
+                                      style: const TextStyle(
+                                        fontSize: 26,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: -0.8,
+                                        fontFeatures: [
+                                          FontFeature.tabularFigures(),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                myProjected.toStringAsFixed(1),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF6D6D6D),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            SizedBox(
+                              width: 66,
+                              child: Text(
+                                widget.isSoccer ? 'Round\nFpts' : 'Projected\nFpts',
+                                maxLines: 2,
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  height: 1.2,
+                                  color: Color(0xFF6D6D6D),
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Text(
+                                opponentProjected.toStringAsFixed(1),
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Color(0xFF6D6D6D),
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: _fantasyTeamSummary(team: matchup.opponent),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Row(
+              children: [
+                Text(
+                  '${(homeRatio * 100).round()}%',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const Expanded(
+                  child: Text(
+                    'Win probability',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF6D6D6D),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Text(
+                  '${((1 - homeRatio) * 100).round()}%',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            _WinBar(homeRatio: homeRatio),
+            const SizedBox(height: 18),
+            if (widget.isSoccer) ...[
+              _LineupField(
+                lineup: fantasySoccerLineup!,
+                isSoccer: true,
+                homeRecord: '',
+                awayRecord: '',
+                onPlayerTap: (slot) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PlayerProfilePage(
+                        name: slot.name,
+                        ownership: myRosterNames.contains(slot.name)
+                            ? PlayerOwnership.myTeam
+                            : PlayerOwnership.otherTeam,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 14),
+              _fantasyBenchColumns(matchup: matchup, round: matchup.round),
+            ] else
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8F8F8),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.black12),
+                ),
+                child: IntrinsicHeight(
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _fantasyStartingList(
+                        title: '${matchup.myTeam.teamName} Starting',
+                        players: matchup.myTeam.starting,
+                        round: matchup.round,
+                        draft: matchup.draft,
+                        team: matchup.myTeam,
+                      ),
+                      Container(
+                        width: 1,
+                        margin: const EdgeInsets.symmetric(horizontal: 14),
+                        color: Colors.black12,
+                      ),
+                      _fantasyStartingList(
+                        title: '${matchup.opponent.teamName} Starting',
+                        players: matchup.opponent.starting,
+                        round: matchup.round,
+                        draft: matchup.draft,
+                        team: matchup.opponent,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        );
+      case _MatchSection.roster:
+        if (!widget.isSoccer) {
+          return Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8F8F8),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.black12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'My Roster',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Starting',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                _StaticRosterList(players: _starting),
+                const SizedBox(height: 14),
+                const Text(
+                  'Bench',
+                  style: TextStyle(fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 8),
+                _StaticRosterList(players: _bench),
+              ],
+            ),
+          );
+        }
+
+        void openMyPlayerProfile(_PlayerSlot p) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PlayerProfilePage(
+                name: p.name,
+                ownership: PlayerOwnership.myTeam,
+              ),
+            ),
+          );
+        }
+
+        final rosterByName = <String, _PlayerSlot>{
+          for (final p in [..._starting, ..._bench]) p.name: p,
+        };
+        final displayRows = _rowsFromSoccerStartingSlots(
+          _starting,
+        ).reversed.toList();
+        final currentRound = _currentFantasyRoundAt(draft, DateTime.now());
+        final rankedStarting = [..._starting]
+          ..sort(
+            (a, b) =>
+                _fantasySlotDisplayScore(b).compareTo(_fantasySlotDisplayScore(a)),
+          );
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8F8F8),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.black12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'My Roster',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                '선수를 탭하면 미니 팝업에서 캡틴과 VC를 지정할 수 있습니다.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF5E5E5E),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 14),
+              _FantasyRosterHalfPitch(
+                rows: displayRows,
+                rosterByName: rosterByName,
+                color: Colors.blueAccent,
+                captainName:
+                    _fantasySoccerCaptainName(draft, _fantasyMyTeam!, currentRound) ??
+                    (rankedStarting.isEmpty ? null : rankedStarting[0].name),
+                viceCaptainName:
+                    _fantasySoccerViceCaptainName(
+                      draft,
+                      _fantasyMyTeam!,
+                      currentRound,
+                    ) ??
+                    (rankedStarting.length < 2 ? null : rankedStarting[1].name),
+                scoreForSlot: _fantasySlotDisplayScore,
+                onSwap: _swapPlayers,
+                onTap: openMyPlayerProfile,
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: null,
+                  style: ElevatedButton.styleFrom(
+                    elevation: 0,
+                    disabledBackgroundColor: const Color(0xFFD1D7E5),
+                    disabledForegroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text(
+                    '저장',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Bench',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              ),
+              const SizedBox(height: 8),
+              _FantasyBenchList(
+                players: _bench,
+                scoreForSlot: _fantasySlotDisplayScore,
+                onSwap: _swapPlayers,
+                onTap: openMyPlayerProfile,
+              ),
+            ],
+          ),
+        );
+      case _MatchSection.players:
+        final ownership = {
+          for (final team in draft.fantasyTeams)
+            for (final player in team.roster) player.name: team.teamName,
+        };
+        final currentRound = _currentFantasyRoundAt(draft, DateTime.now());
+        final rosterTeamByPlayer = <String, _FantasyTeamState>{
+          for (final team in draft.fantasyTeams)
+            for (final player in team.roster) player.name: team,
+        };
+        return Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8F8F8),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.black12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Players',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 12),
+              ..._allPlayers.map(
+                (player) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(
+                    player.name,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  subtitle: Text(
+                    '${player.position} · ${ownership[player.name] ?? ''}',
+                  ),
+                  trailing: Text(
+                    widget.isSoccer
+                        ? _formatFantasyBadgeScore(
+                            (() {
+                              final team = rosterTeamByPlayer[player.name];
+                              if (team == null) return 0.0;
+                              return _fantasySoccerDisplayedPlayerRoundScore(
+                                draft,
+                                team,
+                                player.name,
+                                currentRound,
+                              );
+                            })(),
+                          )
+                        : '${player.score}',
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => PlayerProfilePage(
+                          name: player.name,
+                          ownership:
+                              ownership[player.name] == _fantasyMyTeam?.teamName
+                              ? PlayerOwnership.myTeam
+                              : PlayerOwnership.otherTeam,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      case _MatchSection.league:
+        final standings = _fantasyStandings(draft);
+        final currentRound = _currentFantasyRoundAt(draft, DateTime.now());
+        return Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8F8F8),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.black12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'League',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Standings',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              ...List.generate(standings.length, (index) {
+                final row = standings[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    '${index + 1}. ${row.team} · ${row.wins}-${row.losses}-${row.ties} · ${row.points.toStringAsFixed(1)} pts',
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                );
+              }),
+              const SizedBox(height: 16),
+              Text(
+                'Round $currentRound Schedule',
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              const SizedBox(height: 8),
+              ...draft.fantasySchedule
+                  .where((matchup) => matchup.round == currentRound)
+                  .map(
+                    (matchup) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        '${matchup.homeTeam} vs ${matchup.awayTeam}',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+            ],
+          ),
+        );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_fantasyDraft != null) {
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        appBar: LeagueItSubAppBar(
+          key: _appBarKey,
+          onMyPageTap: () => setState(() => _isMyPageOpen = !_isMyPageOpen),
+          showSearch: false,
+        ),
+        body: GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onTap: () {
+            FocusScope.of(context).unfocus();
+            _appBarKey.currentState?.closeSearch();
+          },
+          child: Stack(
+            children: [
+              SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: [
+                        _CategoryChip(
+                          label: 'Match up',
+                          active: _section == _MatchSection.matchup,
+                          onTap: () =>
+                              setState(() => _section = _MatchSection.matchup),
+                        ),
+                        _CategoryChip(
+                          label: 'Roster',
+                          active: _section == _MatchSection.roster,
+                          onTap: () =>
+                              setState(() => _section = _MatchSection.roster),
+                        ),
+                        _CategoryChip(
+                          label: 'Players',
+                          active: _section == _MatchSection.players,
+                          onTap: () =>
+                              setState(() => _section = _MatchSection.players),
+                        ),
+                        _CategoryChip(
+                          label: 'League',
+                          active: _section == _MatchSection.league,
+                          onTap: () =>
+                              setState(() => _section = _MatchSection.league),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    _buildFantasySectionContent(_fantasyDraft!),
+                  ],
+                ),
+              ),
+              if (_isMyPageOpen)
+                GestureDetector(
+                  onTap: () => setState(() => _isMyPageOpen = false),
+                  child: Container(color: Colors.black.withOpacity(0.35)),
+                ),
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeOutBack,
+                top: _isMyPageOpen ? 100 : 20,
+                right: _isMyPageOpen ? 24 : 12,
+                child: AnimatedScale(
+                  duration: const Duration(milliseconds: 400),
+                  scale: _isMyPageOpen ? 1.0 : 0.2,
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 250),
+                    opacity: _isMyPageOpen ? 1 : 0,
+                    child: MyPageCard(
+                      isLoggedIn: homeKey.currentState?.isLoggedIn ?? false,
+                      onLogin: () {
+                        homeKey.currentState?.updateLogin(true);
+                        Navigator.pop(context);
+                      },
+                      onLogout: () {
+                        homeKey.currentState?.updateLogin(false);
+                        homeKey.currentState?.closePanels();
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (_isResolvingFantasyDraft) {
+      return Scaffold(
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+        appBar: LeagueItSubAppBar(
+          key: _appBarKey,
+          onMyPageTap: () => setState(() => _isMyPageOpen = !_isMyPageOpen),
+          showSearch: false,
+        ),
+        body: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 12),
+              Text(
+                '매치업 데이터 준비 중',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     if (!kUseMockDataOutsideDraft) {
       return Scaffold(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -777,7 +1968,7 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
                 child: _comingSoonCard(
                   '실데이터 연동 준비 중',
                   subtitle:
-                      'Matchup, Roster, Players, League 데이터는 API/Firebase 연동 후 제공됩니다.\n(Mock은 Draft 연습에서만 사용)',
+                      'Matchup, Roster, Players, League 데이터는 API/Firebase 연동 후 제공됩니다.',
                 ),
               ),
             ),
@@ -817,8 +2008,6 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
       );
     }
 
-    final String homeEmoji = widget.isSoccer ? '🦊' : '🦁';
-    final String awayEmoji = widget.isSoccer ? '🐻' : '🐯';
     final double defaultWinPct = widget.isSoccer ? 0.73 : 0.58;
     const String homeRecord = 'W3 D1 L1';
     const String awayRecord = 'W2 D2 L1';
@@ -891,7 +2080,9 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
                         _TeamBadge(
-                          emoji: homeEmoji,
+                          icon: widget.isSoccer
+                              ? Icons.shield_outlined
+                              : Icons.sports_baseball,
                           label: '${(winPctHome * 100).round()}%',
                         ),
                         Column(
@@ -918,7 +2109,9 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
                           ],
                         ),
                         _TeamBadge(
-                          emoji: awayEmoji,
+                          icon: widget.isSoccer
+                              ? Icons.workspace_premium_outlined
+                              : Icons.emoji_events_outlined,
                           label: '${((1 - winPctHome) * 100).round()}%',
                         ),
                       ],
@@ -927,7 +2120,8 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
                     _WinBar(homeRatio: winPctHome),
                     const SizedBox(height: 12),
                   ],
-                  if (_section == _MatchSection.matchup && !widget.isSoccer) ...[
+                  if (_section == _MatchSection.matchup &&
+                      !widget.isSoccer) ...[
                     _comingSoonCard(
                       'KBO Match up은 준비 중입니다.',
                       subtitle: '현재는 K League(축구) 매치업만 지원해요.',
@@ -936,28 +2130,28 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
                   ],
                   AnimatedSwitcher(
                     duration: const Duration(milliseconds: 220),
-                child: _buildSectionContent(
-                  key: ValueKey(_section),
-                  context: context,
-                  section: _section,
-                  lineup: _lineup,
-                  isSoccer: widget.isSoccer,
-                  allPlayers: _allPlayers,
-                  startingSlots: _starting,
-                  benchSlots: _bench,
-                  onSwapPlayer: _swapPlayers,
-                  onSignFreeAgent: _trySignFreeAgent,
-                  onTradeRequest: _requestTrade,
-                  homeRecord: homeRecord,
-                  awayRecord: awayRecord,
-                  searchQuery: _playerSearch,
-                  showOnlyFreeAgents: _showOnlyFreeAgents,
-                  onToggleShowOnlyFreeAgents: (v) =>
-                      setState(() => _showOnlyFreeAgents = v),
-                  onSearchChanged: (text) =>
-                      setState(() => _playerSearch = text.trim()),
-                ),
-                ),
+                    child: _buildSectionContent(
+                      key: ValueKey(_section),
+                      context: context,
+                      section: _section,
+                      lineup: _lineup,
+                      isSoccer: widget.isSoccer,
+                      allPlayers: _allPlayers,
+                      startingSlots: _starting,
+                      benchSlots: _bench,
+                      onSwapPlayer: _swapPlayers,
+                      onSignFreeAgent: _trySignFreeAgent,
+                      onTradeRequest: _requestTrade,
+                      homeRecord: homeRecord,
+                      awayRecord: awayRecord,
+                      searchQuery: _playerSearch,
+                      showOnlyFreeAgents: _showOnlyFreeAgents,
+                      onToggleShowOnlyFreeAgents: (v) =>
+                          setState(() => _showOnlyFreeAgents = v),
+                      onSearchChanged: (text) =>
+                          setState(() => _playerSearch = text.trim()),
+                    ),
+                  ),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -983,7 +2177,9 @@ class _MatchDetailPageState extends State<MatchDetailPage> {
                 child: AnimatedSlide(
                   duration: const Duration(milliseconds: 260),
                   curve: Curves.easeOutCubic,
-                  offset: _isMyPageOpen ? Offset.zero : const Offset(0.10, -0.06),
+                  offset: _isMyPageOpen
+                      ? Offset.zero
+                      : const Offset(0.10, -0.06),
                   child: AnimatedScale(
                     duration: const Duration(milliseconds: 260),
                     curve: Curves.easeOutCubic,
@@ -1063,10 +2259,8 @@ void _showInlinePlayerCard(
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => PlayerProfilePage(
-                  name: slot.name,
-                  ownership: ownership,
-                ),
+                builder: (_) =>
+                    PlayerProfilePage(name: slot.name, ownership: ownership),
               ),
             );
           },
@@ -1114,7 +2308,8 @@ Widget _buildSectionContent({
           onPlayerTap: (slot) => _showInlinePlayerCard(
             context,
             slot,
-            ownership: _MatchDetailPageState._playerOwnerCache[slot.name] ??
+            ownership:
+                _MatchDetailPageState._playerOwnerCache[slot.name] ??
                 PlayerOwnership.freeAgent,
           ),
         );
@@ -1143,7 +2338,10 @@ Widget _buildSectionContent({
       }
       final startList = startingSlots ?? [];
       final benchList = benchSlots ?? [];
-      if (startList.isEmpty && benchList.isEmpty && lineup == null && (allPlayers == null || allPlayers.isEmpty)) {
+      if (startList.isEmpty &&
+          benchList.isEmpty &&
+          lineup == null &&
+          (allPlayers == null || allPlayers.isEmpty)) {
         return const SizedBox.shrink();
       }
 
@@ -1151,14 +2349,16 @@ Widget _buildSectionContent({
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) =>
-                PlayerProfilePage(name: p.name, ownership: PlayerOwnership.myTeam),
+            builder: (_) => PlayerProfilePage(
+              name: p.name,
+              ownership: PlayerOwnership.myTeam,
+            ),
           ),
         );
       }
 
-      if (!isSoccer || lineup == null) {
-        // KBO or missing lineup: keep simple lists.
+      if (!isSoccer) {
+        // KBO: keep simple lists.
         return Container(
           key: key,
           padding: const EdgeInsets.all(20),
@@ -1175,7 +2375,10 @@ Widget _buildSectionContent({
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 12),
-              const Text('Starting', style: TextStyle(fontWeight: FontWeight.w700)),
+              const Text(
+                'Starting',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 6),
               _DraggableRosterList(
                 players: startList,
@@ -1183,7 +2386,10 @@ Widget _buildSectionContent({
                 onTap: openMyPlayerProfile,
               ),
               const SizedBox(height: 12),
-              const Text('Bench', style: TextStyle(fontWeight: FontWeight.w700)),
+              const Text(
+                'Bench',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
               const SizedBox(height: 6),
               _DraggableRosterList(
                 players: benchList,
@@ -1199,8 +2405,9 @@ Widget _buildSectionContent({
       final rosterByName = <String, _PlayerSlot>{
         for (final p in [...startList, ...benchList]) p.name: p,
       };
-      final homeRows = lineup.home;
-      final displayRows = homeRows.isNotEmpty &&
+      final homeRows = lineup?.home ?? _rowsFromSoccerStartingSlots(startList);
+      final displayRows =
+          homeRows.isNotEmpty &&
               homeRows.first.slots.isNotEmpty &&
               homeRows.first.slots.first.position == 'GK'
           ? homeRows.reversed.toList()
@@ -1219,22 +2426,70 @@ Widget _buildSectionContent({
           children: [
             const Text(
               'My Roster',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
             ),
-            const SizedBox(height: 12),
-            _RosterHalfPitch(
+            const SizedBox(height: 8),
+            const Text(
+              '선수를 탭하면 미니 팝업에서 캡틴과 VC를 지정할 수 있습니다.',
+              style: TextStyle(
+                fontSize: 13,
+                color: Color(0xFF5E5E5E),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 14),
+            _FantasyRosterHalfPitch(
               rows: displayRows,
               rosterByName: rosterByName,
               color: Colors.blueAccent,
+              captainName: startList.isEmpty
+                  ? null
+                  : ([...startList]..sort(
+                          (a, b) => _fantasyProjectedSlotScore(
+                            b,
+                          ).compareTo(_fantasyProjectedSlotScore(a)),
+                        ))
+                        .first
+                        .name,
+              viceCaptainName: startList.length < 2
+                  ? null
+                  : ([...startList]..sort(
+                          (a, b) => _fantasyProjectedSlotScore(
+                            b,
+                          ).compareTo(_fantasyProjectedSlotScore(a)),
+                        ))[1]
+                        .name,
               onSwap: onSwapPlayer,
               onTap: openMyPlayerProfile,
             ),
-            const SizedBox(height: 12),
-            const Text('Bench', style: TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 6),
-            _DraggableRosterList(
+            const SizedBox(height: 14),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: null,
+                style: ElevatedButton.styleFrom(
+                  elevation: 0,
+                  disabledBackgroundColor: const Color(0xFFD1D7E5),
+                  disabledForegroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                ),
+                child: const Text(
+                  '저장',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'Bench',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            _FantasyBenchList(
               players: benchList,
-              showMeta: true,
               onSwap: onSwapPlayer,
               onTap: openMyPlayerProfile,
             ),
@@ -1326,8 +2581,11 @@ Widget _buildSectionContent({
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) =>
-                  _SimpleListPage(title: title, items: items, isSoccer: isSoccer),
+              builder: (_) => _SimpleListPage(
+                title: title,
+                items: items,
+                isSoccer: isSoccer,
+              ),
             ),
           );
         }
@@ -1485,15 +2743,18 @@ Widget _buildSectionContent({
           _MatchDetailPageState._playerOwnerCache[p.name] ??
           PlayerOwnership.freeAgent;
       final slotsAfterFa = showOnlyFreeAgents
-          ? allSlots.where((p) => ownOf(p) == PlayerOwnership.freeAgent).toList()
+          ? allSlots
+                .where((p) => ownOf(p) == PlayerOwnership.freeAgent)
+                .toList()
           : allSlots;
       final filtered = q.isEmpty
           ? slotsAfterFa
           : slotsAfterFa
-              .where((p) => p.name.toLowerCase().contains(q))
-              .toList();
-      final faCount =
-          allSlots.where((p) => ownOf(p) == PlayerOwnership.freeAgent).length;
+                .where((p) => p.name.toLowerCase().contains(q))
+                .toList();
+      final faCount = allSlots
+          .where((p) => ownOf(p) == PlayerOwnership.freeAgent)
+          .length;
       return Container(
         key: key,
         padding: const EdgeInsets.all(20),
@@ -1520,8 +2781,10 @@ Widget _buildSectionContent({
                   borderRadius: BorderRadius.circular(14),
                   borderSide: const BorderSide(color: Colors.black12),
                 ),
-                contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
               ),
               onChanged: onSearchChanged,
             ),
@@ -1569,133 +2832,134 @@ Widget _buildSectionContent({
                   ),
                 ),
               ),
-            ...filtered.map(
-              (p) {
-                final ownership = ownOf(p);
+            ...filtered.map((p) {
+              final ownership = ownOf(p);
 
-                Color statusColor(PlayerOwnership o) => switch (o) {
-                      PlayerOwnership.myTeam => Colors.green,
-                      PlayerOwnership.otherTeam => Colors.redAccent,
-                      PlayerOwnership.freeAgent => Colors.blueGrey,
-                    };
+              Color statusColor(PlayerOwnership o) => switch (o) {
+                PlayerOwnership.myTeam => Colors.green,
+                PlayerOwnership.otherTeam => Colors.redAccent,
+                PlayerOwnership.freeAgent => Colors.blueGrey,
+              };
 
-                String statusLabel(PlayerOwnership o) => switch (o) {
-                      PlayerOwnership.myTeam => '내 팀',
-                      PlayerOwnership.otherTeam => '다른 팀',
-                      PlayerOwnership.freeAgent => 'FA',
-                    };
+              String statusLabel(PlayerOwnership o) => switch (o) {
+                PlayerOwnership.myTeam => '내 팀',
+                PlayerOwnership.otherTeam => '다른 팀',
+                PlayerOwnership.freeAgent => 'FA',
+              };
 
-                return Column(
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 16,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: statusColor(ownership).withOpacity(0.14),
-                            border: Border.all(
-                              color: statusColor(ownership),
-                              width: 1.2,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          statusLabel(ownership),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
+              return Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 16,
+                        height: 16,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: statusColor(ownership).withOpacity(0.14),
+                          border: Border.all(
                             color: statusColor(ownership),
+                            width: 1.2,
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => PlayerProfilePage(
-                                    name: p.name,
-                                    ownership: ownership,
-                                    onSign: ownership == PlayerOwnership.freeAgent
-                                        ? () => onSignFreeAgent?.call(p) ?? Future.value()
-                                        : null,
-                                    onTradeRequest:
-                                        ownership == PlayerOwnership.otherTeam
-                                            ? () => onTradeRequest?.call(p) ??
-                                                Future.value()
-                                            : null,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        statusLabel(ownership),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: statusColor(ownership),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => PlayerProfilePage(
+                                  name: p.name,
+                                  ownership: ownership,
+                                  onSign: ownership == PlayerOwnership.freeAgent
+                                      ? () =>
+                                            onSignFreeAgent?.call(p) ??
+                                            Future.value()
+                                      : null,
+                                  onTradeRequest:
+                                      ownership == PlayerOwnership.otherTeam
+                                      ? () =>
+                                            onTradeRequest?.call(p) ??
+                                            Future.value()
+                                      : null,
+                                ),
+                              ),
+                            );
+                          },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  p.name,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
-                              );
-                            },
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    p.name,
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w700,
-                                    ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${p.position} · ${_resolvePlayerMeta(p.name).club}',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.black54,
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${p.position} · ${_resolvePlayerMeta(p.name).club}',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.black54,
-                                    ),
-                                  ),
-                                ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      if (ownership == PlayerOwnership.freeAgent)
+                        InkWell(
+                          onTap: () => onSignFreeAgent?.call(p),
+                          borderRadius: BorderRadius.circular(999),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(999),
+                              border: Border.all(
+                                color: Colors.green,
+                                width: 1.2,
+                              ),
+                            ),
+                            child: const Text(
+                              '영입',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.green,
                               ),
                             ),
                           ),
                         ),
-                        if (ownership == PlayerOwnership.freeAgent)
-                          InkWell(
-                            onTap: () => onSignFreeAgent?.call(p),
-                            borderRadius: BorderRadius.circular(999),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.12),
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                  color: Colors.green,
-                                  width: 1.2,
-                                ),
-                              ),
-                              child: const Text(
-                                '영입',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.green,
-                                ),
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                    const Divider(
-                      height: 12,
-                      thickness: 1,
-                      color: Colors.black12,
-                    ),
-                  ],
-                );
-              },
-            ),
+                    ],
+                  ),
+                  const Divider(
+                    height: 12,
+                    thickness: 1,
+                    color: Colors.black12,
+                  ),
+                ],
+              );
+            }),
           ],
         ),
       );
@@ -1765,7 +3029,6 @@ class _LineupField extends StatelessWidget {
             top: margin,
             height: halfHeight,
             padding: padding,
-            isHome: true,
             color: homeColor,
             onTap: onPlayerTap,
           ),
@@ -1774,7 +3037,6 @@ class _LineupField extends StatelessWidget {
             top: margin + halfHeight,
             height: halfHeight,
             padding: padding,
-            isHome: false,
             color: awayColor,
             onTap: onPlayerTap,
           ),
@@ -1953,14 +3215,20 @@ class _SimpleListPageState extends State<_SimpleListPage> {
         separatorBuilder: (_, __) => const SizedBox.shrink(),
         itemBuilder: (_, i) {
           if (isStanding) {
-            final colors = [Colors.green, Colors.blue, Colors.teal, Colors.grey];
+            final colors = [
+              Colors.green,
+              Colors.blue,
+              Colors.teal,
+              Colors.grey,
+            ];
             final color = colors[(i ~/ 3).clamp(0, colors.length - 1)];
             return Column(
               children: [
                 ListTile(
                   dense: true,
-                  tileColor:
-                      i.isEven ? color.withOpacity(0.06) : color.withOpacity(0.03),
+                  tileColor: i.isEven
+                      ? color.withOpacity(0.06)
+                      : color.withOpacity(0.03),
                   leading: Container(
                     width: 36,
                     height: 36,
@@ -1972,19 +3240,24 @@ class _SimpleListPageState extends State<_SimpleListPage> {
                     child: Text(
                       '${i + 1}',
                       style: const TextStyle(
-                          fontWeight: FontWeight.bold, color: Colors.white),
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                   title: Text(
                     widget.items[i],
                     style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 15),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                    ),
                   ),
                   onTap: widget.isSoccer
                       ? () {
                           final team = _extractTeamName(widget.items[i]);
-                          final myTeam =
-                              widget.isSoccer ? 'Blue Foxes' : 'Seoul Sluggers';
+                          final myTeam = widget.isSoccer
+                              ? 'Blue Foxes'
+                              : 'Seoul Sluggers';
                           if (team == myTeam) {
                             Navigator.pushReplacement(
                               context,
@@ -2006,7 +3279,11 @@ class _SimpleListPageState extends State<_SimpleListPage> {
                         }
                       : null,
                 ),
-                const Divider(height: 1, thickness: 1, color: Color(0xFFEAEAEA)),
+                const Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: Color(0xFFEAEAEA),
+                ),
               ],
             );
           } else if (isPower) {
@@ -2015,8 +3292,9 @@ class _SimpleListPageState extends State<_SimpleListPage> {
               children: [
                 ListTile(
                   dense: true,
-                  tileColor:
-                      i.isEven ? color.withOpacity(0.07) : color.withOpacity(0.03),
+                  tileColor: i.isEven
+                      ? color.withOpacity(0.07)
+                      : color.withOpacity(0.03),
                   leading: Icon(Icons.bolt, color: color),
                   title: Text(
                     widget.items[i],
@@ -2036,8 +3314,9 @@ class _SimpleListPageState extends State<_SimpleListPage> {
                   onTap: widget.isSoccer
                       ? () {
                           final team = _extractTeamName(widget.items[i]);
-                          final myTeam =
-                              widget.isSoccer ? 'Blue Foxes' : 'Seoul Sluggers';
+                          final myTeam = widget.isSoccer
+                              ? 'Blue Foxes'
+                              : 'Seoul Sluggers';
                           if (team == myTeam) {
                             Navigator.pushReplacement(
                               context,
@@ -2059,7 +3338,11 @@ class _SimpleListPageState extends State<_SimpleListPage> {
                         }
                       : null,
                 ),
-                const Divider(height: 1, thickness: 1, color: Color(0xFFEAEAEA)),
+                const Divider(
+                  height: 1,
+                  thickness: 1,
+                  color: Color(0xFFEAEAEA),
+                ),
               ],
             );
           } else {
@@ -2145,7 +3428,9 @@ class _TeamSquadPageState extends State<_TeamSquadPage> {
       );
     }
 
-    final lineup = _MatchDetailPageState.getOrCreateSoccerFixtureLineup(fixture);
+    final lineup = _MatchDetailPageState.getOrCreateSoccerFixtureLineup(
+      fixture,
+    );
     final isHome = fixture.home == widget.teamName;
     final rows = isHome ? lineup.home : lineup.away;
     final starting = rows.expand((r) => r.slots).toList();
@@ -2156,7 +3441,8 @@ class _TeamSquadPageState extends State<_TeamSquadPage> {
     final color = _teamColor(widget.teamName);
 
     // Display rows should be ordered from top(FW) -> bottom(GK) in a half pitch view.
-    final displayRows = rows.isNotEmpty &&
+    final displayRows =
+        rows.isNotEmpty &&
             rows.first.slots.isNotEmpty &&
             rows.first.slots.first.position == 'GK'
         ? rows.reversed.toList()
@@ -2306,6 +3592,267 @@ class _RosterHalfPitch extends StatelessWidget {
   }
 }
 
+double _fantasyProjectedSlotScore(_PlayerSlot slot, {bool isSoccer = true}) {
+  return (isSoccer ? 1.8 : 3.6) * slot.score;
+}
+
+class _FantasyRosterHalfPitch extends StatelessWidget {
+  const _FantasyRosterHalfPitch({
+    required this.rows,
+    required this.rosterByName,
+    required this.color,
+    required this.onSwap,
+    required this.onTap,
+    this.scoreForSlot,
+    this.captainName,
+    this.viceCaptainName,
+  });
+
+  final List<_Player> rows;
+  final Map<String, _PlayerSlot> rosterByName;
+  final Color color;
+  final void Function(_PlayerSlot from, _PlayerSlot to)? onSwap;
+  final void Function(_PlayerSlot) onTap;
+  final double Function(_PlayerSlot slot)? scoreForSlot;
+  final String? captainName;
+  final String? viceCaptainName;
+
+  @override
+  Widget build(BuildContext context) {
+    const double margin = 12;
+    const double padding = 18;
+    final double usableHeight = max(
+      320.0,
+      (rows.length <= 1 ? 150.0 : 78.0 * (rows.length - 1) + 132.0),
+    );
+    final double fieldHeight = margin * 2 + usableHeight;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxCols = rows.fold<int>(
+          1,
+          (prev, row) => max(prev, row.slots.length),
+        );
+        final chipWidth = ((constraints.maxWidth - 20) / maxCols).clamp(
+          56.0,
+          82.0,
+        );
+        return SizedBox(
+          height: fieldHeight,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(18),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(painter: _HalfPitchPainter()),
+                ),
+                ..._positionRowsHalfFantasyRoster(
+                  rows: rows,
+                  top: margin,
+                  height: usableHeight,
+                  padding: padding,
+                  chipWidth: chipWidth,
+                  rosterByName: rosterByName,
+                  color: color,
+                  captainName: captainName,
+                  viceCaptainName: viceCaptainName,
+                  scoreForSlot: scoreForSlot,
+                  onSwap: onSwap,
+                  onTap: onTap,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+List<Widget> _positionRowsHalfFantasyRoster({
+  required List<_Player> rows,
+  required double top,
+  required double height,
+  required double padding,
+  required double chipWidth,
+  required Map<String, _PlayerSlot> rosterByName,
+  required Color color,
+  required String? captainName,
+  required String? viceCaptainName,
+  required double Function(_PlayerSlot slot)? scoreForSlot,
+  required void Function(_PlayerSlot from, _PlayerSlot to)? onSwap,
+  required void Function(_PlayerSlot) onTap,
+}) {
+  final double usable = max(40, height - padding * 2);
+  final double spacing = rows.length > 1 ? usable / rows.length : usable / 2;
+  final double start = padding.clamp(0, height - padding - usable);
+  return [
+    for (int i = 0; i < rows.length; i++)
+      Positioned(
+        top: top + start + spacing * i,
+        left: 0,
+        right: 0,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: rows[i].slots.map((s) {
+              final slot = rosterByName[s.name] ?? s;
+              return _FantasyRosterChip(
+                slot: slot,
+                width: chipWidth,
+                color: color,
+                isCaptain: slot.name == captainName,
+                isViceCaptain: slot.name == viceCaptainName,
+                scoreForSlot: scoreForSlot,
+                onSwap: onSwap,
+                onTap: onTap,
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+  ];
+}
+
+class _FantasyRosterChip extends StatelessWidget {
+  const _FantasyRosterChip({
+    required this.slot,
+    required this.width,
+    required this.color,
+    required this.onSwap,
+    required this.onTap,
+    this.scoreForSlot,
+    this.isCaptain = false,
+    this.isViceCaptain = false,
+  });
+
+  final _PlayerSlot slot;
+  final double width;
+  final Color color;
+  final void Function(_PlayerSlot from, _PlayerSlot to)? onSwap;
+  final void Function(_PlayerSlot) onTap;
+  final double Function(_PlayerSlot slot)? scoreForSlot;
+  final bool isCaptain;
+  final bool isViceCaptain;
+
+  @override
+  Widget build(BuildContext context) {
+    return DragTarget<_PlayerSlot>(
+      onWillAcceptWithDetails: (details) => details.data != slot,
+      onAcceptWithDetails: (details) => onSwap?.call(details.data, slot),
+      builder: (context, candidate, rejected) {
+        final highlight = candidate.isNotEmpty;
+        return LongPressDraggable<_PlayerSlot>(
+          data: slot,
+          feedback: _chipBody(highlight: true, isGhost: true),
+          childWhenDragging: Opacity(
+            opacity: 0.35,
+            child: _chipBody(highlight: false),
+          ),
+          child: _chipBody(highlight: highlight),
+        );
+      },
+    );
+  }
+
+  Widget _chipBody({required bool highlight, bool isGhost = false}) {
+    final circleSize = (width * 0.62).clamp(40.0, 58.0);
+    final iconSize = (circleSize * 0.42).clamp(16.0, 24.0);
+    final badgeFontSize = width <= 62 ? 9.0 : 10.0;
+    final textFontSize = width <= 62 ? 8.5 : 10.0;
+    final body = GestureDetector(
+      onTap: () => onTap(slot),
+      child: SizedBox(
+        width: width,
+        child: Column(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: circleSize,
+                  height: circleSize,
+                  decoration: BoxDecoration(
+                    color: (highlight ? Colors.green : color).withOpacity(0.08),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: highlight ? Colors.green : color,
+                      width: highlight ? 2.2 : 1.8,
+                    ),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      Icons.person,
+                      size: iconSize,
+                      color: highlight ? Colors.green : color,
+                    ),
+                  ),
+                ),
+                if (isCaptain || isViceCaptain)
+                  Positioned(
+                    top: -4,
+                    right: -4,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isCaptain
+                            ? const Color(0xFFFFCF4D)
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: isViceCaptain
+                              ? const Color(0xFF7EA9FF)
+                              : const Color(0xFFE0B331),
+                        ),
+                      ),
+                      child: Text(
+                        isCaptain ? 'C' : 'VC',
+                        style: TextStyle(
+                          fontSize: badgeFontSize,
+                          fontWeight: FontWeight.w900,
+                          color: isCaptain
+                              ? const Color(0xFF1F1F1F)
+                              : const Color(0xFF4672E8),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            SizedBox(
+              width: width,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  '${slot.name} / ${(scoreForSlot?.call(slot) ?? _fantasyProjectedSlotScore(slot)).toStringAsFixed(1)}',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: textFontSize,
+                    fontWeight: FontWeight.w800,
+                  ),
+                  maxLines: 1,
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (!isGhost) return body;
+    return Material(
+      color: Colors.transparent,
+      child: Opacity(opacity: 0.92, child: body),
+    );
+  }
+}
+
 List<Widget> _positionRowsHalfDraggable({
   required List<_Player> rows,
   required double top,
@@ -2377,8 +3924,11 @@ class _DraggableRosterChip extends StatelessWidget {
     );
   }
 
-  Widget _chipBody(BuildContext context,
-      {required bool highlight, bool isGhost = false}) {
+  Widget _chipBody(
+    BuildContext context, {
+    required bool highlight,
+    bool isGhost = false,
+  }) {
     final body = GestureDetector(
       onTap: () => onTap(slot),
       child: Column(
@@ -2455,20 +4005,6 @@ class _HalfPitchPainter extends CustomPainter {
       line,
     );
 
-    // Halfway line at the top of the half-field
-    canvas.drawLine(const Offset(0, 0), Offset(width, 0), line);
-
-    // Center circle arc (bottom half of the circle is outside this half)
-    const double centerRadius = 36;
-    // Use an arc centered at top-middle
-    canvas.drawArc(
-      Rect.fromCircle(center: Offset(width / 2, 0), radius: centerRadius),
-      0,
-      pi,
-      false,
-      line,
-    );
-
     // Penalty box near the bottom goal
     const double boxDepth = 80;
     const double boxWidthInset = 40;
@@ -2529,7 +4065,9 @@ class _StaticRosterList extends StatelessWidget {
                   onTap: onTap == null ? null : () => onTap!(p),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: Colors.black12),
@@ -2587,7 +4125,8 @@ class _PlayerOfWeekPageState extends State<_PlayerOfWeekPage> {
         return InkWell(
           borderRadius: BorderRadius.circular(12),
           onTap: () {
-            final own = _MatchDetailPageState._playerOwnerCache[p.name] ??
+            final own =
+                _MatchDetailPageState._playerOwnerCache[p.name] ??
                 PlayerOwnership.freeAgent;
             Navigator.push(
               context,
@@ -2652,7 +4191,7 @@ class _PlayerOfWeekPageState extends State<_PlayerOfWeekPage> {
               color: Colors.black12,
               blurRadius: 4,
               offset: Offset(0, 2),
-            )
+            ),
           ],
         ),
         child: Column(
@@ -2667,8 +4206,9 @@ class _PlayerOfWeekPageState extends State<_PlayerOfWeekPage> {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               crossAxisAlignment: CrossAxisAlignment.end,
               children: List.generate(displayCount, (displayIdx) {
-                final podiumIdx =
-                    displayCount == 3 ? displayOrder[displayIdx] : displayIdx;
+                final podiumIdx = displayCount == 3
+                    ? displayOrder[displayIdx]
+                    : displayIdx;
                 final p = podium[podiumIdx];
                 return bar(podiumIdx, p);
               }),
@@ -2704,7 +4244,7 @@ class _PlayerOfWeekPageState extends State<_PlayerOfWeekPage> {
                   color: Colors.black12,
                   blurRadius: 4,
                   offset: Offset(0, 2),
-                )
+                ),
               ],
             ),
             child: ListTile(
@@ -2726,7 +4266,8 @@ class _PlayerOfWeekPageState extends State<_PlayerOfWeekPage> {
               subtitle: Text('${p.position} · ${p.score} pts'),
               trailing: const Icon(Icons.chevron_right, size: 18),
               onTap: () {
-                final own = _MatchDetailPageState._playerOwnerCache[p.name] ??
+                final own =
+                    _MatchDetailPageState._playerOwnerCache[p.name] ??
                     PlayerOwnership.freeAgent;
                 Navigator.push(
                   context,
@@ -2763,17 +4304,16 @@ class _DraggableRosterList extends StatelessWidget {
         (p) => DragTarget<_PlayerSlot>(
           onWillAcceptWithDetails: (details) => details.data != p,
           onAcceptWithDetails: (details) => onSwap?.call(details.data, p),
-          builder: (context, candidate, rejected) => LongPressDraggable<_PlayerSlot>(
-            data: p,
-            feedback: _ghostTile(p),
-            childWhenDragging:
-                Opacity(opacity: 0.4, child: _tile(context, p)),
-            child: _tile(
-              context,
-              p,
-              highlight: candidate.isNotEmpty,
-            ),
-          ),
+          builder: (context, candidate, rejected) =>
+              LongPressDraggable<_PlayerSlot>(
+                data: p,
+                feedback: _ghostTile(p),
+                childWhenDragging: Opacity(
+                  opacity: 0.4,
+                  child: _tile(context, p),
+                ),
+                child: _tile(context, p, highlight: candidate.isNotEmpty),
+              ),
         ),
       ),
     ];
@@ -2798,8 +4338,11 @@ class _DraggableRosterList extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.drag_indicator,
-                    size: 18, color: Colors.black45),
+                const Icon(
+                  Icons.drag_indicator,
+                  size: 18,
+                  color: Colors.black45,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: showMeta
@@ -2857,7 +4400,7 @@ class _DraggableRosterList extends StatelessWidget {
                 color: Colors.black26,
                 blurRadius: 6,
                 offset: Offset(0, 3),
-              )
+              ),
             ],
           ),
           child: showMeta
@@ -2891,6 +4434,114 @@ class _DraggableRosterList extends StatelessWidget {
                   ),
                 ),
         ),
+      ),
+    );
+  }
+}
+
+class _FantasyBenchList extends StatelessWidget {
+  const _FantasyBenchList({
+    required this.players,
+    this.onSwap,
+    this.onTap,
+    this.scoreForSlot,
+  });
+
+  final List<_PlayerSlot> players;
+  final void Function(_PlayerSlot from, _PlayerSlot to)? onSwap;
+  final void Function(_PlayerSlot)? onTap;
+  final double Function(_PlayerSlot slot)? scoreForSlot;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        ...players.map(
+          (p) => DragTarget<_PlayerSlot>(
+            onWillAcceptWithDetails: (details) => details.data != p,
+            onAcceptWithDetails: (details) => onSwap?.call(details.data, p),
+            builder: (context, candidate, rejected) =>
+                LongPressDraggable<_PlayerSlot>(
+                  data: p,
+                  feedback: _ghostTile(context, p),
+                  childWhenDragging: Opacity(
+                    opacity: 0.4,
+                    child: _tile(context, p),
+                  ),
+                  child: _tile(context, p, highlight: candidate.isNotEmpty),
+                ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _tile(BuildContext context, _PlayerSlot p, {bool highlight = false}) {
+    return _tileBody(p, highlight: highlight);
+  }
+
+  Widget _tileBody(_PlayerSlot p, {bool highlight = false}) {
+    final meta = _resolvePlayerMeta(p.name);
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: Material(
+        color: highlight ? Colors.green.withOpacity(0.08) : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: onTap == null ? null : () => onTap!(p),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.black12),
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.drag_indicator,
+                  size: 20,
+                  color: Colors.black45,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${p.name} / ${(scoreForSlot?.call(p) ?? _fantasyProjectedSlotScore(p)).toStringAsFixed(1)}',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${p.position} · ${meta.club}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _ghostTile(BuildContext context, _PlayerSlot p) {
+    final feedbackWidth = MediaQuery.of(context).size.width - 64;
+    return Material(
+      color: Colors.transparent,
+      child: Opacity(
+        opacity: 0.92,
+        child: SizedBox(width: feedbackWidth, child: _tileBody(p)),
       ),
     );
   }
@@ -3082,22 +4733,48 @@ List<Widget> _positionRows({
   required double top,
   required double height,
   required double padding,
-  required bool isHome,
   required Color color,
   required void Function(_PlayerSlot) onTap,
 }) {
-  final double usable = max(40, height - padding * 2);
-  final double bias = isHome ? -usable * 0.2 : usable * 0.2;
-  final double start = (padding + bias).clamp(0, height - padding - usable);
-  final double spacing = rows.length > 1 ? usable / (rows.length) : usable / 2;
+  const double rowHeight = 64;
+  const double edgeInset = 14;
+  const double penaltyBoxDepth = 65;
+  const double goalKeeperInset = 0;
+  final double firstRowTop = top + padding + edgeInset;
+  final double lastRowTop = top + height - padding - rowHeight - edgeInset;
+  final double span = lastRowTop - firstRowTop;
+  final bool isFourLineSoccerShape = rows.length == 4;
+  final bool startsWithGoalkeeper =
+      rows.isNotEmpty &&
+      rows.first.slots.length == 1 &&
+      rows.first.slots.first.position == 'GK';
+  final List<double> fractions = isFourLineSoccerShape
+      ? (startsWithGoalkeeper
+            ? const [0.0, 0.16, 0.58, 1.0]
+            : const [0.0, 0.42, 0.84, 1.0])
+      : [
+          for (int i = 0; i < rows.length; i++)
+            rows.length > 1 ? i / (rows.length - 1) : 0.0,
+        ];
   return [
     for (int i = 0; i < rows.length; i++)
-      Positioned(
-        top: top + start + spacing * i,
-        left: 0,
-        right: 0,
-        child: _LineupRow(players: rows[i], color: color, onTap: onTap),
-      ),
+      () {
+        final row = rows[i];
+        final isGoalkeeperRow =
+            row.slots.length == 1 && row.slots.first.position == 'GK';
+        double rowTop = firstRowTop + span * fractions[i];
+        if (isFourLineSoccerShape && isGoalkeeperRow) {
+          rowTop = startsWithGoalkeeper
+              ? top + goalKeeperInset
+              : top + height - penaltyBoxDepth + goalKeeperInset;
+        }
+        return Positioned(
+          top: rowTop,
+          left: 0,
+          right: 0,
+          child: _LineupRow(players: row, color: color, onTap: onTap),
+        );
+      }(),
   ];
 }
 
@@ -3315,8 +4992,9 @@ class _FixtureCardsPageState extends State<_FixtureCardsPage> {
   @override
   Widget build(BuildContext context) {
     final myTeam = widget.isSoccer ? 'Blue Foxes' : 'Seoul Sluggers';
-    final cached =
-        widget.isSoccer ? _MatchDetailPageState._cachedSoccerLineup : null;
+    final cached = widget.isSoccer
+        ? _MatchDetailPageState._cachedSoccerLineup
+        : null;
     final ordered = List<_FixtureScore>.from(_fixtures)
       ..sort((a, b) {
         final aMy = (a.home == myTeam || a.away == myTeam) ? 0 : 1;
@@ -3461,8 +5139,9 @@ class _FixtureScoreCard extends StatelessWidget {
     required Color color,
     required bool isWinner,
   }) {
-    final scoreText =
-        isSoccer ? score.toStringAsFixed(0) : score.toStringAsFixed(1);
+    final scoreText = isSoccer
+        ? score.toStringAsFixed(0)
+        : score.toStringAsFixed(1);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -3549,10 +5228,12 @@ class _FixtureDetailPageState extends State<_FixtureDetailPage> {
     final _LineupData? lineup = widget.isSoccer
         ? _MatchDetailPageState.getOrCreateSoccerFixtureLineup(widget.fixture)
         : null;
-    final double homeScore =
-        widget.isSoccer ? lineup!.homeScore.toDouble() : widget.fixture.homeScore;
-    final double awayScore =
-        widget.isSoccer ? lineup!.awayScore.toDouble() : widget.fixture.awayScore;
+    final double homeScore = widget.isSoccer
+        ? lineup!.homeScore.toDouble()
+        : widget.fixture.homeScore;
+    final double awayScore = widget.isSoccer
+        ? lineup!.awayScore.toDouble()
+        : widget.fixture.awayScore;
     final total = homeScore + awayScore;
     final winPctHome = total == 0 ? 0.5 : homeScore / total;
     final homePct = (winPctHome * 100).round();
@@ -3574,7 +5255,9 @@ class _FixtureDetailPageState extends State<_FixtureDetailPage> {
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 _TeamBadge(
-                  emoji: '🦊',
+                  icon: widget.isSoccer
+                      ? Icons.shield_outlined
+                      : Icons.sports_baseball,
                   label: widget.isSoccer
                       ? homeScore.toStringAsFixed(0)
                       : homeScore.toStringAsFixed(1),
@@ -3599,7 +5282,9 @@ class _FixtureDetailPageState extends State<_FixtureDetailPage> {
                   ],
                 ),
                 _TeamBadge(
-                  emoji: '🐻',
+                  icon: widget.isSoccer
+                      ? Icons.workspace_premium_outlined
+                      : Icons.emoji_events_outlined,
                   label: widget.isSoccer
                       ? awayScore.toStringAsFixed(0)
                       : awayScore.toStringAsFixed(1),
@@ -3735,8 +5420,9 @@ class _TradePageState extends State<_TradePage> {
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (_, i) {
                   final p = data[i];
-                  final selected =
-                      isMine ? _selectedMine == i : _selectedTarget == i;
+                  final selected = isMine
+                      ? _selectedMine == i
+                      : _selectedTarget == i;
                   return ListTile(
                     dense: true,
                     leading: Icon(

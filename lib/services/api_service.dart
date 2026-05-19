@@ -8,7 +8,29 @@ class ApiService {
 
   static const String baseUrl =
       'https://us-central1-leagueit-e6a05.cloudfunctions.net/getLeagueStandings';
+  static const String teamStatisticsUrl =
+      'https://us-central1-leagueit-e6a05.cloudfunctions.net/getTeamStatistics';
+  static const String fixtureDetailsUrl =
+      'https://us-central1-leagueit-e6a05.cloudfunctions.net/getFixtureDetails';
+  static const String kboLeagueDataUrl =
+      'https://us-central1-leagueit-e6a05.cloudfunctions.net/getKboLeagueData';
+  static const String kboMatchDetailsUrl =
+      'https://us-central1-leagueit-e6a05.cloudfunctions.net/getKboMatchDetails';
   static const int targetSeason = 2026;
+  static const Map<String, String> _kLeagueApiTeamNames = {
+    '부천FC 1995': 'Bucheon FC 1995',
+    '강원 FC': 'Gangwon FC',
+    'FC 안양': 'FC Anyang',
+    '대전 하나 시티즌': 'Daejeon Citizen',
+    '광주 FC': 'Gwangju FC',
+    '제주 유나이티드': 'Jeju United FC',
+    '전북 현대 모터스': 'Jeonbuk Motors',
+    '인천 유나이티드': 'Incheon United',
+    '포항 스틸러스': 'Pohang Steelers',
+    'FC 서울': 'FC Seoul',
+    '울산 HD': 'Ulsan Hyundai FC',
+    '김천 상무': 'Gimcheon Sangmu FC',
+  };
 
   static Future<Map<String, dynamic>> fetchLeagueData() async {
     final response = await http.get(Uri.parse(baseUrl));
@@ -27,7 +49,92 @@ class ApiService {
       'API loaded: standings=${standings.length}, fixtures=${fixtures.length}',
     );
 
-    return {'standings': standings, 'fixtures': fixtures};
+    return {
+      ...decoded,
+      'standings': standings,
+      'fixtures': fixtures,
+      'teams': _extractTeams(decoded),
+      'seasons': _extractSeasons(decoded),
+    };
+  }
+
+  static Future<Map<String, dynamic>> fetchTeamStatistics(String team) async {
+    final apiTeamName = _kLeagueApiTeamNames[team.trim()] ?? team;
+    final uri = Uri.parse(
+      teamStatisticsUrl,
+    ).replace(queryParameters: {'team': apiTeamName});
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to load team statistics (${response.statusCode})',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Invalid team statistics response format');
+    }
+
+    return decoded;
+  }
+
+  static Future<Map<String, dynamic>> fetchFixtureDetails(int fixtureId) async {
+    final uri = Uri.parse(
+      fixtureDetailsUrl,
+    ).replace(queryParameters: {'fixture': '$fixtureId'});
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to load fixture details (${response.statusCode})',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Invalid fixture details response format');
+    }
+
+    return decoded;
+  }
+
+  static Future<Map<String, dynamic>> fetchKboLeagueData() async {
+    final response = await http.get(Uri.parse(kboLeagueDataUrl));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load KBO data (${response.statusCode})');
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Invalid KBO response format');
+    }
+
+    final standings = decoded['standings'];
+    final matches = decoded['matches'];
+    debugPrint(
+      'KBO API loaded: standings=${standings is List ? standings.length : 0}, '
+      'matches=${matches is List ? matches.length : 0}',
+    );
+
+    return decoded;
+  }
+
+  static Future<Map<String, dynamic>> fetchKboMatchDetails(int matchId) async {
+    final uri = Uri.parse(
+      kboMatchDetailsUrl,
+    ).replace(queryParameters: {'match': '$matchId'});
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to load KBO match details (${response.statusCode})',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Invalid KBO match details response format');
+    }
+
+    return decoded;
   }
 
   static List<dynamic> _extractStandings(
@@ -67,6 +174,22 @@ class ApiService {
     final topFixtures = decoded['fixtures'];
     if (topFixtures is List<dynamic>) {
       return topFixtures;
+    }
+    return const <dynamic>[];
+  }
+
+  static List<dynamic> _extractTeams(Map<String, dynamic> decoded) {
+    final topTeams = decoded['teams'];
+    if (topTeams is List<dynamic>) {
+      return topTeams;
+    }
+    return const <dynamic>[];
+  }
+
+  static List<dynamic> _extractSeasons(Map<String, dynamic> decoded) {
+    final topSeasons = decoded['seasons'];
+    if (topSeasons is List<dynamic>) {
+      return topSeasons;
     }
     return const <dynamic>[];
   }

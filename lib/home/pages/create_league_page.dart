@@ -23,7 +23,7 @@ class _CreateLeaguePageState extends State<CreateLeaguePage> {
   @override
   void initState() {
     super.initState();
-    _roundCount = widget.isSoccer ? 19 : 72;
+    _roundCount = widget.isSoccer ? 19 : 34;
   }
 
   @override
@@ -135,6 +135,7 @@ class _CreateLeaguePageState extends State<CreateLeaguePage> {
       _DraftResult(
         leagueName: _nameCtrl.text.trim(),
         when: _draftDateTime!,
+        isSoccer: widget.isSoccer,
       ),
     );
   }
@@ -195,7 +196,9 @@ class _CreateLeaguePageState extends State<CreateLeaguePage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.isSoccer ? 'Create your League' : 'Create your League',
+                    widget.isSoccer
+                        ? 'Create K League Fantasy League'
+                        : 'Create KBO Fantasy League',
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -235,7 +238,7 @@ class _CreateLeaguePageState extends State<CreateLeaguePage> {
                       labelText: 'Rounds',
                       border: OutlineInputBorder(),
                     ),
-                    items: (widget.isSoccer ? [19, 38] : [72, 144])
+                    items: (widget.isSoccer ? [19, 38] : [34])
                         .map(
                           (e) => DropdownMenuItem(
                             value: e,
@@ -351,5 +354,10 @@ class _CreateLeaguePageState extends State<CreateLeaguePage> {
 class _DraftResult {
   final String leagueName;
   final DateTime when;
-  const _DraftResult({required this.leagueName, required this.when});
+  final bool isSoccer;
+  const _DraftResult({
+    required this.leagueName,
+    required this.when,
+    required this.isSoccer,
+  });
 }

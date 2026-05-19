@@ -31,9 +31,16 @@ class _CardSwitcherState extends State<CardSwitcher>
   double _fromDrag = 0.0;
   double _toDrag = 0.0;
   bool _pendingSwitch = false;
+  Curve _releaseCurve = Curves.linear;
 
   static const double switchThreshold = 120;
   static const double maxDrag = 220;
+  static const double peek = 16;
+  static const double releasePixelsPerSecond = 520;
+
+  double _lerp(double begin, double end, double t) {
+    return begin + (end - begin) * t;
+  }
 
   @override
   void initState() {
@@ -44,19 +51,28 @@ class _CardSwitcherState extends State<CardSwitcher>
     );
 
     _controller.addListener(() {
-      final t = Curves.easeOutCubic.transform(_controller.value);
+      final t = _releaseCurve.transform(_controller.value);
       setState(() {
         dragX = _fromDrag + (_toDrag - _fromDrag) * t;
       });
     });
 
     _controller.addStatusListener((status) {
-      if (status == AnimationStatus.completed && _pendingSwitch) {
-        final tmp = _front;
-        _front = _back;
-        _back = tmp;
-        _pendingSwitch = false;
-        widget.onFrontLeagueChanged?.call(_front == LeagueCard.kLeague);
+      if (status == AnimationStatus.completed) {
+        if (_pendingSwitch) {
+          final tmp = _front;
+          _front = _back;
+          _back = tmp;
+          _pendingSwitch = false;
+          dragX = 0.0;
+          widget.onFrontLeagueChanged?.call(_front == LeagueCard.kLeague);
+          setState(() {});
+          return;
+        }
+
+        if (dragX != 0.0) {
+          setState(() => dragX = 0.0);
+        }
       }
     });
 
@@ -83,45 +99,66 @@ class _CardSwitcherState extends State<CardSwitcher>
   void handleDragEnd(DragEndDetails _) {
     _pendingSwitch = dragX.abs() > switchThreshold;
     _fromDrag = dragX;
-    _toDrag = 0.0;
+    _toDrag = _pendingSwitch ? dragX.sign * maxDrag : 0.0;
+    final distance = (_toDrag - _fromDrag).abs();
+    final durationMs = ((distance / releasePixelsPerSecond) * 1000)
+        .round()
+        .clamp(140, 360);
+    _releaseCurve = Curves.linear;
+    _controller.duration = Duration(milliseconds: durationMs);
     _controller.forward(from: 0);
   }
 
   @override
   Widget build(BuildContext context) {
-    const double peek = 16;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final frameWidth = max(284.0, screenWidth - 44.0);
+    final cardWidth = frameWidth - peek;
+    final cardHeight = cardWidth * 0.62;
     final double m = dragX.abs();
+    final double progress = (m / switchThreshold).clamp(0.0, 1.0);
     bool hasLeagueFor(bool isSoccer) =>
         isSoccer ? widget.hasSoccerLeague : widget.hasBaseballLeague;
 
     final Offset frontOffset = Offset(m, -m * 0.35);
-    final Offset backOffset = Offset(peek - m * 0.9, -peek + m * 0.35);
+    final Offset backOffset = Offset(_lerp(peek, 6, progress), -peek);
+    final double frontScale = _lerp(1.0, 0.94, progress);
+    final double backScale = _lerp(0.95, 1.0, progress);
+    final double frontRotation = _lerp(0.0, 0.03, progress);
 
     final bool frontSoccer = _front == LeagueCard.kLeague;
     final bool backSoccer = _back == LeagueCard.kLeague;
-    final bool showMatchUpFront =
-        kUseMockDataOutsideDraft &&
-        widget.isLoggedIn &&
-        hasLeagueFor(frontSoccer);
-    final bool showMatchUpBack =
-        kUseMockDataOutsideDraft && widget.isLoggedIn && hasLeagueFor(backSoccer);
+    final frontMatchup = homeKey.currentState?.currentFantasyMatchupForSport(
+      frontSoccer,
+    );
+    final backMatchup = homeKey.currentState?.currentFantasyMatchupForSport(
+      backSoccer,
+    );
+    final bool showMatchUpFront = widget.isLoggedIn && frontMatchup != null;
+    final bool showMatchUpBack = widget.isLoggedIn && backMatchup != null;
 
     Widget cardFor({
       required bool isSoccer,
       required bool showMatchUp,
+      required _FantasyMatchupView? matchup,
       required VoidCallback onStart,
     }) {
       if (showMatchUp) {
         return MatchupCard(
           isSoccer: isSoccer,
           onStart: onStart,
+          matchup: matchup,
         );
       }
 
       if (widget.isLoggedIn &&
           hasLeagueFor(isSoccer) &&
           !kUseMockDataOutsideDraft) {
-        return _LeagueDataPendingCard(isSoccer: isSoccer);
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onStart,
+          child: _LeagueDataPendingCard(isSoccer: isSoccer),
+        );
       }
 
       return CardBase(
@@ -133,79 +170,90 @@ class _CardSwitcherState extends State<CardSwitcher>
     }
 
     Future<void> openFor(bool isSoccer) async {
-      if (widget.isLoggedIn && hasLeagueFor(isSoccer)) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => MatchDetailPage(
-              isSoccer: isSoccer,
-              initialSection: _MatchSection.matchup,
-            ),
-          ),
-        );
-        return;
-      }
-
-      // 이미 로그인되어 있으면 바로 생성 화면으로 이동
-      if (homeKey.currentState?.isLoggedIn == true) {
-        final result = await Navigator.push<_DraftResult>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => CreateLeaguePage(isSoccer: isSoccer),
-          ),
-        );
-        if (result != null) {
-          homeKey.currentState
-              ?.setDraft(result.when, result.leagueName, isSoccer: isSoccer);
-          homeKey.currentState?.setHasLeagueForSport(isSoccer, true);
-        }
-        return;
-      }
-
-      // 로그인 안된 상태면 로그인부터
-      final loggedIn = await Navigator.push<bool>(
+      final fantasyDraft = widget.isLoggedIn && hasLeagueFor(isSoccer)
+          ? homeKey.currentState?.fantasyDraftForSport(isSoccer)
+          : null;
+      Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => const LoginPage()),
-      );
-      if (loggedIn == true) {
-        homeKey.currentState?.updateLogin(true);
-        final result = await Navigator.push<_DraftResult>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => CreateLeaguePage(isSoccer: isSoccer),
+        MaterialPageRoute(
+          builder: (_) => MatchDetailPage(
+            isSoccer: isSoccer,
+            draft: fantasyDraft,
+            initialSection: _MatchSection.matchup,
           ),
-        );
-        if (result != null) {
-          homeKey.currentState
-              ?.setDraft(result.when, result.leagueName, isSoccer: isSoccer);
-          homeKey.currentState?.setHasLeagueForSport(isSoccer, true);
-        }
+        ),
+      );
+    }
+
+    Widget animatedCard({
+      required Widget child,
+      required Offset offset,
+      required double scale,
+      required double opacity,
+      required double rotation,
+      bool interactive = false,
+    }) {
+      final card = Transform.translate(
+        offset: offset,
+        child: Transform.rotate(
+          angle: rotation,
+          alignment: Alignment.center,
+          child: Transform.scale(
+            scale: scale,
+            alignment: Alignment.center,
+            child: Opacity(opacity: opacity.clamp(0.0, 1.0), child: child),
+          ),
+        ),
+      );
+
+      if (!interactive) {
+        return IgnorePointer(ignoring: true, child: card);
       }
+
+      return GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        // Horizontal-only drag so vertical swipes can scroll the home page.
+        onHorizontalDragUpdate: handleDragUpdate,
+        onHorizontalDragEnd: handleDragEnd,
+        child: card,
+      );
     }
 
     return SizedBox(
-      width: 300,
-      height: 200,
+      width: frameWidth,
+      height: cardHeight,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          Transform.translate(
+          animatedCard(
             offset: backOffset,
-            child: cardFor(
-              isSoccer: backSoccer,
-              showMatchUp: showMatchUpBack,
-              onStart: () => openFor(backSoccer),
+            child: SizedBox(
+              width: cardWidth,
+              height: cardHeight,
+              child: cardFor(
+                isSoccer: backSoccer,
+                showMatchUp: showMatchUpBack,
+                matchup: backMatchup,
+                onStart: () => openFor(backSoccer),
+              ),
             ),
+            scale: backScale,
+            opacity: 1.0,
+            rotation: 0.0,
           ),
-          Transform.translate(
+          animatedCard(
             offset: frontOffset,
-            child: GestureDetector(
-              // Horizontal-only drag so vertical swipes can scroll the home page.
-              onHorizontalDragUpdate: handleDragUpdate,
-              onHorizontalDragEnd: handleDragEnd,
+            scale: frontScale,
+            opacity: 1.0,
+            rotation: frontRotation,
+            interactive: true,
+            child: SizedBox(
+              width: cardWidth,
+              height: cardHeight,
               child: cardFor(
                 isSoccer: frontSoccer,
                 showMatchUp: showMatchUpFront,
+                matchup: frontMatchup,
                 onStart: () => openFor(frontSoccer),
               ),
             ),
@@ -226,8 +274,8 @@ class _LeagueDataPendingCard extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
     return Container(
-      width: 300,
-      height: 200,
+      width: double.infinity,
+      height: double.infinity,
       padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
       decoration: BoxDecoration(
         color: cs.surface,
@@ -252,7 +300,7 @@ class _LeagueDataPendingCard extends StatelessWidget {
           ),
           const Spacer(),
           Text(
-            'Mock 데이터는 Draft 연습에서만 사용됩니다.',
+            '공식 경기/포인트 데이터 연동 후 제공됩니다.',
             style: TextStyle(
               color: cs.onSurface.withOpacity(0.7),
               fontSize: 12,

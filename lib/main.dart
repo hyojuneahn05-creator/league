@@ -8,9 +8,7 @@ import 'home/home_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   await authController.init();
   runApp(const MyApp());
 }
@@ -25,6 +23,7 @@ class MyApp extends StatelessWidget {
       builder: (context, _) {
         final ThemeData light = ThemeData.light().copyWith(
           scaffoldBackgroundColor: Colors.white,
+          cardColor: Colors.white,
           colorScheme: ThemeData.light().colorScheme.copyWith(
             primary: Colors.green,
             secondary: Colors.greenAccent,
