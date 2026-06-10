@@ -1,18 +1,26 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'dart:io';
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:leagueit/app_settings.dart';
 import 'package:leagueit/auth/auth_controller.dart';
+import 'package:leagueit/public_user_profile.dart';
 import 'package:leagueit/services/api_service.dart';
 import 'package:leagueit/services/league_service.dart';
+import 'package:leagueit/services/push_notification_service.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 part 'widgets/custom_app_bar.dart';
 part 'widgets/my_page_card.dart';
@@ -45,14 +53,603 @@ part 'pages/schedule_page.dart';
 
 final GlobalKey<LeagueItHomePageState> homeKey =
     GlobalKey<LeagueItHomePageState>();
+const FlutterSecureStorage _profileAvatarStorage = FlutterSecureStorage(
+  iOptions: IOSOptions(accountName: 'leagueit_local_state'),
+);
+final ValueNotifier<String?> _profileAvatarPathNotifier =
+    ValueNotifier<String?>(null);
+final Map<String, ValueNotifier<String?>> _publicProfileAvatarUrlNotifiers = {};
+bool _profileAvatarPathLoaded = false;
+String _profileAvatarPathLoadedUid = '';
+Future<void>? _profileAvatarPathLoadFuture;
+int _profileAvatarPathLoadToken = 0;
+final Map<String, Future<void>> _publicProfileAvatarUrlLoadFutures = {};
+const String _localStateCacheDirectoryName = 'local_state_cache';
+Future<Directory>? _localStateCacheDirectoryFuture;
+
+Future<Directory> _ensureLocalStateCacheDirectory() {
+  final inFlight = _localStateCacheDirectoryFuture;
+  if (inFlight != null) return inFlight;
+  final future = () async {
+    final baseDirectory = await getApplicationSupportDirectory();
+    final directory = Directory(
+      '${baseDirectory.path}/$_localStateCacheDirectoryName',
+    );
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+    }
+    return directory;
+  }();
+  _localStateCacheDirectoryFuture = future;
+  return future;
+}
+
+String _localStateCacheFileName(String key) =>
+    '${base64Url.encode(utf8.encode(key)).replaceAll('=', '')}.json';
+
+Future<File> _localStateCacheFile(String key) async {
+  final directory = await _ensureLocalStateCacheDirectory();
+  return File('${directory.path}/${_localStateCacheFileName(key)}');
+}
+
+Future<String?> _readLocalStateCache(String key) async {
+  try {
+    final file = await _localStateCacheFile(key);
+    if (!await file.exists()) return null;
+    final value = await file.readAsString();
+    final normalized = value.trim();
+    return normalized.isEmpty ? null : normalized;
+  } catch (error, stackTrace) {
+    debugPrint('Local state cache read failed ($key): $error');
+    debugPrint('$stackTrace');
+    return null;
+  }
+}
+
+Future<void> _writeLocalStateCache(String key, String value) async {
+  final file = await _localStateCacheFile(key);
+  await file.writeAsString(value, flush: true);
+}
+
+Future<String?> _readLocalStateCacheWithLegacySecureStorage({
+  required String key,
+  required FlutterSecureStorage legacyStorage,
+}) async {
+  final cached = await _readLocalStateCache(key);
+  if (cached != null) return cached;
+  try {
+    final legacy = await legacyStorage.read(key: key);
+    final normalized = legacy?.trim() ?? '';
+    if (normalized.isEmpty) return null;
+    await _writeLocalStateCache(key, normalized);
+    unawaited(legacyStorage.delete(key: key));
+    return normalized;
+  } catch (error, stackTrace) {
+    debugPrint('Legacy secure cache restore failed ($key): $error');
+    debugPrint('$stackTrace');
+    return null;
+  }
+}
 
 // Hide placeholder league/match/standings data until real data is connected.
 const bool kUseMockDataOutsideDraft = false;
 const Duration _koreaTimeOffset = Duration(hours: 9);
+final FilteringTextInputFormatter _passwordAsciiInputFormatter =
+    FilteringTextInputFormatter.allow(RegExp(r'[\x21-\x7E]'));
+
+bool _isAllowedPasswordValue(String value) {
+  return RegExp(r'^[\x21-\x7E]*$').hasMatch(value);
+}
+
+class _LeagueItSurfacePalette {
+  final bool isDark;
+  final Color pageBackground;
+  final Color cardBorder;
+  final Color fieldFill;
+  final Color ink;
+  final Color mutedInk;
+  final Color accent;
+  final Color accentSoft;
+  final Color gradientTop;
+  final Color gradientBottom;
+  final Color buttonDisabled;
+  final Color tileSurface;
+  final Color chipBorder;
+  final Color popupSurfaceTop;
+  final Color popupSurfaceBottom;
+  final Color popupBorder;
+
+  const _LeagueItSurfacePalette({
+    required this.isDark,
+    required this.pageBackground,
+    required this.cardBorder,
+    required this.fieldFill,
+    required this.ink,
+    required this.mutedInk,
+    required this.accent,
+    required this.accentSoft,
+    required this.gradientTop,
+    required this.gradientBottom,
+    required this.buttonDisabled,
+    required this.tileSurface,
+    required this.chipBorder,
+    required this.popupSurfaceTop,
+    required this.popupSurfaceBottom,
+    required this.popupBorder,
+  });
+}
+
+_LeagueItSurfacePalette _leagueItSurfacePalette(BuildContext context) {
+  final isDark = Theme.of(context).brightness == Brightness.dark;
+  if (isDark) {
+    return const _LeagueItSurfacePalette(
+      isDark: true,
+      pageBackground: Color(0xFF0F1110),
+      cardBorder: Color(0xFF2A322D),
+      fieldFill: Color(0xFF171B19),
+      ink: Color(0xFFF5F7F2),
+      mutedInk: Color(0xFFB1B7AF),
+      accent: Color(0xFF54B37B),
+      accentSoft: Color(0xFF183226),
+      gradientTop: Color(0xFF151917),
+      gradientBottom: Color(0xFF0F1311),
+      buttonDisabled: Color(0xFF3C4741),
+      tileSurface: Color(0xFF161A18),
+      chipBorder: Color(0xFF29523D),
+      popupSurfaceTop: Color(0xFF171B20),
+      popupSurfaceBottom: Color(0xFF101418),
+      popupBorder: Color(0xFF2A3440),
+    );
+  }
+  return const _LeagueItSurfacePalette(
+    isDark: false,
+    pageBackground: Color(0xFFF7F7F2),
+    cardBorder: Color(0xFFD8DDD2),
+    fieldFill: Color(0xFFFFFFFC),
+    ink: Color(0xFF1E1E1B),
+    mutedInk: Color(0xFF6B6C66),
+    accent: Color(0xFF245B45),
+    accentSoft: Color(0xFFE4F0E9),
+    gradientTop: Color(0xFFF5F7F0),
+    gradientBottom: Color(0xFFFDFBF3),
+    buttonDisabled: Color(0xFFBFC8BF),
+    tileSurface: Color(0xFFFFFFFF),
+    chipBorder: Color(0xFFCBE1D2),
+    popupSurfaceTop: Color(0xFFFFFFFF),
+    popupSurfaceBottom: Color(0xFFF7FAFF),
+    popupBorder: Color(0xFFDDE7FF),
+  );
+}
+
+bool _fantasyMatchupHasLiveOfficialGames(_FantasyMatchupView matchup) {
+  if (!matchup.scoresReady) return false;
+  return _fantasyRoundHasLiveOfficialGames(matchup.draft, matchup.round);
+}
+
+bool _fantasyRoundHasLiveOfficialGames(_JoinedDraft draft, int fantasyRound) {
+  if (fantasyRound <= 0) return false;
+  if (draft.isSoccer) {
+    final rawFixtures = _fixtureAsList(_cachedKLeagueLeagueData?['fixtures']);
+    if (rawFixtures.isEmpty) return false;
+    final leagueRound = _mappedKLeagueRoundForFantasyRound(
+      draft,
+      fantasyRound,
+      rawFixtures,
+    );
+    for (final raw in rawFixtures) {
+      final map = _fixtureAsMap(raw);
+      final league = _fixtureAsMap(map['league']);
+      if (_roundNumber(_fixtureText(league['round'])) != leagueRound) {
+        continue;
+      }
+      final fixture = _fixtureAsMap(map['fixture']);
+      final status = _fixtureAsMap(fixture['status']);
+      if (_isKLeagueLiveStatusShort(_fixtureText(status['short']))) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  final rawMatches = _fixtureAsList(_cachedKboLeagueData?['matches']);
+  if (rawMatches.isEmpty) return false;
+  final leagueRound = _mappedKboRoundForFantasyRound(draft, fantasyRound);
+  for (final raw in rawMatches) {
+    final match = _fixtureAsMap(raw);
+    final matchDate = DateTime.tryParse(_fixtureText(match['date']));
+    if (matchDate == null) continue;
+    if (_kboFantasyRoundForMatchDate(matchDate) != leagueRound) continue;
+    if (_isKboLiveStatus(_fixtureText(match['status']))) {
+      return true;
+    }
+  }
+  return false;
+}
+
+class _AnimatedFantasyScoreText extends StatefulWidget {
+  final double score;
+  final int fractionDigits;
+  final TextStyle style;
+  final Color baseColor;
+  final bool animateChanges;
+  final TextAlign textAlign;
+
+  const _AnimatedFantasyScoreText({
+    super.key,
+    required this.score,
+    required this.fractionDigits,
+    required this.style,
+    required this.baseColor,
+    required this.animateChanges,
+    this.textAlign = TextAlign.center,
+  });
+
+  @override
+  State<_AnimatedFantasyScoreText> createState() =>
+      _AnimatedFantasyScoreTextState();
+}
+
+class _AnimatedFantasyScoreTextState extends State<_AnimatedFantasyScoreText>
+    with SingleTickerProviderStateMixin {
+  static const _highlightUp = Color(0xFF16A34A);
+  static const _highlightDown = Color(0xFFE53935);
+
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 720),
+    value: 1,
+  );
+  int _direction = 0;
+
+  @override
+  void didUpdateWidget(covariant _AnimatedFantasyScoreText oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final delta = widget.score - oldWidget.score;
+    if (delta.abs() < 0.0001) return;
+    if (!widget.animateChanges) {
+      _direction = 0;
+      _controller.value = 1;
+      return;
+    }
+    _direction = delta > 0 ? 1 : -1;
+    _controller.forward(from: 0);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final label = widget.score.toStringAsFixed(widget.fractionDigits);
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final progress = _controller.value;
+        final pulse = progress < 0.45
+            ? Curves.easeOut.transform(progress / 0.45)
+            : 1 - Curves.easeOut.transform((progress - 0.45) / 0.55);
+        final scale = 1 + (pulse.clamp(0.0, 1.0) * 0.16);
+        final highlight = _direction > 0 ? _highlightUp : _highlightDown;
+        final color = _direction == 0 || !widget.animateChanges
+            ? widget.baseColor
+            : Color.lerp(
+                highlight,
+                widget.baseColor,
+                Curves.easeOutCubic.transform(progress),
+              )!;
+        return Transform.scale(
+          scale: scale,
+          child: Text(
+            label,
+            maxLines: 1,
+            textAlign: widget.textAlign,
+            style: widget.style.copyWith(color: color),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _AnimatedFantasyScorePair extends StatelessWidget {
+  final String scoreIdentity;
+  final double homeScore;
+  final double awayScore;
+  final int fractionDigits;
+  final bool animateChanges;
+  final TextStyle scoreStyle;
+  final TextStyle separatorStyle;
+  final Color baseColor;
+  final String separator;
+
+  const _AnimatedFantasyScorePair({
+    required this.scoreIdentity,
+    required this.homeScore,
+    required this.awayScore,
+    required this.fractionDigits,
+    required this.animateChanges,
+    required this.scoreStyle,
+    required this.separatorStyle,
+    required this.baseColor,
+    this.separator = ':',
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _AnimatedFantasyScoreText(
+          key: ValueKey('$scoreIdentity|home'),
+          score: homeScore,
+          fractionDigits: fractionDigits,
+          style: scoreStyle,
+          baseColor: baseColor,
+          animateChanges: animateChanges,
+          textAlign: TextAlign.right,
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6),
+          child: Text(
+            separator,
+            style: separatorStyle.copyWith(color: baseColor),
+          ),
+        ),
+        _AnimatedFantasyScoreText(
+          key: ValueKey('$scoreIdentity|away'),
+          score: awayScore,
+          fractionDigits: fractionDigits,
+          style: scoreStyle,
+          baseColor: baseColor,
+          animateChanges: animateChanges,
+          textAlign: TextAlign.left,
+        ),
+      ],
+    );
+  }
+}
 
 DateTime _toKst(DateTime value) => value.toUtc().add(_koreaTimeOffset);
+DateTime _toUtcFromKst(DateTime value) => value.subtract(_koreaTimeOffset);
 
 String _twoDigits(int value) => value.toString().padLeft(2, '0');
+
+String _activeProfileAvatarUid() =>
+    FirebaseAuth.instance.currentUser?.uid.trim() ?? '';
+
+String _currentSignedInFantasyDisplayName() {
+  final user = FirebaseAuth.instance.currentUser;
+  if (user == null) return '';
+  final displayName = user.displayName?.trim() ?? '';
+  if (displayName.isNotEmpty) return displayName;
+  final emailPrefix = (user.email ?? '').split('@').first.trim();
+  return emailPrefix;
+}
+
+String _normalizedFantasyIdentityText(String value) {
+  return value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+}
+
+bool _sameFantasyIdentity(String left, String right) {
+  final normalizedLeft = _normalizedFantasyIdentityText(left);
+  final normalizedRight = _normalizedFantasyIdentityText(right);
+  return normalizedLeft.isNotEmpty && normalizedLeft == normalizedRight;
+}
+
+String _normalizedFantasyDisplayNameForUid(String uid, String fallback) {
+  final normalizedUid = uid.trim();
+  final normalizedFallback = fallback.trim();
+  final currentUid = FirebaseAuth.instance.currentUser?.uid.trim() ?? '';
+  if (normalizedUid.isEmpty || normalizedUid != currentUid) {
+    return normalizedFallback;
+  }
+  final preferred = _currentSignedInFantasyDisplayName();
+  return preferred.isNotEmpty ? preferred : normalizedFallback;
+}
+
+String _profileAvatarPathStorageKeyFor(String uid) =>
+    'profile.avatar.path.v1.$uid';
+
+Future<void> _ensureProfileAvatarPathLoaded({String? uid}) {
+  final effectiveUid = (uid ?? _activeProfileAvatarUid()).trim();
+  if (_profileAvatarPathLoaded && _profileAvatarPathLoadedUid == effectiveUid) {
+    return Future<void>.value();
+  }
+  if (effectiveUid.isEmpty) {
+    _profileAvatarPathNotifier.value = null;
+    _profileAvatarPathLoaded = true;
+    _profileAvatarPathLoadedUid = '';
+    return Future<void>.value();
+  }
+  final inFlight = _profileAvatarPathLoadFuture;
+  if (inFlight != null && _profileAvatarPathLoadedUid == effectiveUid) {
+    return inFlight;
+  }
+  final token = ++_profileAvatarPathLoadToken;
+  final storageKey = _profileAvatarPathStorageKeyFor(effectiveUid);
+  final future = _profileAvatarStorage
+      .read(key: storageKey)
+      .then((storedPath) async {
+        String? resolvedPath = storedPath;
+        if (resolvedPath != null && resolvedPath.isNotEmpty) {
+          final file = File(resolvedPath);
+          if (!await file.exists()) {
+            resolvedPath = null;
+            await _profileAvatarStorage.delete(key: storageKey);
+          }
+        } else {
+          resolvedPath = null;
+        }
+        if (token != _profileAvatarPathLoadToken) return;
+        _profileAvatarPathNotifier.value = resolvedPath;
+        _profileAvatarPathLoaded = true;
+        _profileAvatarPathLoadedUid = effectiveUid;
+      })
+      .catchError((_) {
+        if (token != _profileAvatarPathLoadToken) return;
+        _profileAvatarPathNotifier.value = null;
+        _profileAvatarPathLoaded = true;
+        _profileAvatarPathLoadedUid = effectiveUid;
+      })
+      .whenComplete(() {
+        if (token == _profileAvatarPathLoadToken) {
+          _profileAvatarPathLoadFuture = null;
+        }
+      });
+  _profileAvatarPathLoadFuture = future;
+  return future;
+}
+
+Future<void> _persistProfileAvatarPath(String? path, {String? uid}) async {
+  final effectiveUid = (uid ?? _activeProfileAvatarUid()).trim();
+  final normalized = path?.trim() ?? '';
+  if (effectiveUid.isEmpty) {
+    _profileAvatarPathNotifier.value = null;
+    _profileAvatarPathLoaded = true;
+    _profileAvatarPathLoadedUid = '';
+    return;
+  }
+  final storageKey = _profileAvatarPathStorageKeyFor(effectiveUid);
+  if (normalized.isEmpty) {
+    await _profileAvatarStorage.delete(key: storageKey);
+    _profileAvatarPathNotifier.value = null;
+    _profileAvatarPathLoaded = true;
+    _profileAvatarPathLoadedUid = effectiveUid;
+    return;
+  }
+  await _profileAvatarStorage.write(key: storageKey, value: normalized);
+  _profileAvatarPathNotifier.value = normalized;
+  _profileAvatarPathLoaded = true;
+  _profileAvatarPathLoadedUid = effectiveUid;
+}
+
+Future<void> _deletePersistedProfileAvatarForUid(String uid) async {
+  final normalizedUid = uid.trim();
+  if (normalizedUid.isEmpty) return;
+
+  final storageKey = _profileAvatarPathStorageKeyFor(normalizedUid);
+  try {
+    final storedPath = await _profileAvatarStorage.read(key: storageKey);
+    final normalizedPath = storedPath?.trim() ?? '';
+    if (normalizedPath.isNotEmpty) {
+      final file = File(normalizedPath);
+      if (await file.exists()) {
+        await file.delete();
+      }
+    }
+  } catch (_) {
+    // Ignore local avatar cleanup failures during account deletion.
+  }
+
+  try {
+    await _profileAvatarStorage.delete(key: storageKey);
+  } catch (_) {
+    // Ignore secure storage cleanup failures during account deletion.
+  }
+
+  if (_profileAvatarPathLoadedUid == normalizedUid ||
+      _activeProfileAvatarUid().isEmpty) {
+    _profileAvatarPathNotifier.value = null;
+    _profileAvatarPathLoaded = true;
+    _profileAvatarPathLoadedUid = '';
+  }
+}
+
+ValueNotifier<String?> _publicProfileAvatarUrlNotifierFor(String uid) {
+  return _publicProfileAvatarUrlNotifiers.putIfAbsent(
+    uid,
+    () => ValueNotifier<String?>(null),
+  );
+}
+
+void _cachePublicProfileAvatarUrl(String uid, String? url) {
+  final normalizedUid = uid.trim();
+  if (normalizedUid.isEmpty) return;
+  final normalizedUrl = url?.trim() ?? '';
+  _publicProfileAvatarUrlNotifierFor(normalizedUid).value =
+      normalizedUrl.isEmpty ? null : normalizedUrl;
+}
+
+void _clearPublicProfileAvatarUrlCache() {
+  for (final notifier in _publicProfileAvatarUrlNotifiers.values) {
+    notifier.value = null;
+  }
+  _publicProfileAvatarUrlLoadFutures.clear();
+}
+
+Future<void> _ensurePublicProfileAvatarUrlLoaded(
+  String uid, {
+  bool force = false,
+}) {
+  final normalizedUid = uid.trim();
+  if (normalizedUid.isEmpty) return Future<void>.value();
+
+  final notifier = _publicProfileAvatarUrlNotifierFor(normalizedUid);
+  if (!force && (notifier.value?.trim().isNotEmpty ?? false)) {
+    return Future<void>.value();
+  }
+
+  final inFlight = _publicProfileAvatarUrlLoadFutures[normalizedUid];
+  if (!force && inFlight != null) return inFlight;
+
+  final future = FirebaseFirestore.instance
+      .collection(kPublicUserProfilesCollection)
+      .doc(normalizedUid)
+      .get()
+      .then((snapshot) async {
+        final data = snapshot.data() ?? const <String, dynamic>{};
+        var photoUrl = '${data['photoUrl'] ?? ''}'.trim();
+        final currentUid = FirebaseAuth.instance.currentUser?.uid.trim() ?? '';
+        if (photoUrl.isEmpty && normalizedUid == currentUid) {
+          photoUrl = FirebaseAuth.instance.currentUser?.photoURL?.trim() ?? '';
+          if (photoUrl.isNotEmpty) {
+            unawaited(
+              syncCurrentUserPublicProfileFromAuth(
+                FirebaseFirestore.instance,
+                photoUrlOverride: photoUrl,
+              ).catchError((error, stackTrace) {
+                debugPrint(
+                  'Current user public profile backfill failed '
+                  '(uid=$normalizedUid): $error',
+                );
+                debugPrint('$stackTrace');
+              }),
+            );
+          }
+        }
+        if (photoUrl.isEmpty && normalizedUid != currentUid) {
+          try {
+            final profile = await LeagueService.instance.getPublicUserProfile(
+              normalizedUid,
+            );
+            photoUrl = '${profile?['photoUrl'] ?? ''}'.trim();
+          } catch (error, stackTrace) {
+            debugPrint(
+              'Public profile avatar callable fallback failed '
+              '(uid=$normalizedUid): $error',
+            );
+            debugPrint('$stackTrace');
+          }
+        }
+        notifier.value = photoUrl.isEmpty ? null : photoUrl;
+      })
+      .catchError((error, stackTrace) {
+        debugPrint(
+          'Public profile avatar load failed (uid=$normalizedUid): $error',
+        );
+        debugPrint('$stackTrace');
+        notifier.value = null;
+      })
+      .whenComplete(() {
+        _publicProfileAvatarUrlLoadFutures.remove(normalizedUid);
+      });
+
+  _publicProfileAvatarUrlLoadFutures[normalizedUid] = future;
+  return future;
+}
 
 String _kstMonthDayTimeLabel(DateTime value) {
   final kst = _toKst(value);
@@ -74,6 +671,18 @@ class _FantasyLeagueStanding {
   final String team;
   final int pts;
   const _FantasyLeagueStanding({required this.team, required this.pts});
+}
+
+class _HomeSearchSuggestion {
+  final String name;
+  final bool isSoccer;
+  final _DocPlayerMeta meta;
+
+  const _HomeSearchSuggestion({
+    required this.name,
+    required this.isSoccer,
+    required this.meta,
+  });
 }
 
 class _JoinedDraft {
@@ -108,6 +717,64 @@ class _JoinedDraft {
     this.fantasySchedule = const [],
     this.draftBoard = const [],
   });
+
+  Map<String, dynamic> toMap() => {
+    'leagueId': leagueId,
+    'leagueName': leagueName,
+    'when': when.toIso8601String(),
+    'isSoccer': isSoccer,
+    'teamCount': teamCount,
+    'roundCount': roundCount,
+    'memberCount': memberCount,
+    'inviteCode': inviteCode,
+    'ownerId': ownerId,
+    'draftOrder': draftOrder.map((entry) => entry.toMap()).toList(),
+    'fantasyReady': fantasyReady,
+    'fantasyTeams': fantasyTeams.map((team) => team.toMap()).toList(),
+    'fantasySchedule': fantasySchedule
+        .map((matchup) => matchup.toMap())
+        .toList(),
+    'draftBoard': _draftBoardToFirestoreRows(draftBoard),
+  };
+}
+
+_JoinedDraft _joinedDraftFromJoinLeagueResponse(
+  Map<String, dynamic> data, {
+  required String fallbackCode,
+}) {
+  final draftTime = DateTime.tryParse('${data['draftDateTime'] ?? ''}');
+  if (draftTime == null) {
+    throw StateError('Draft 정보가 없는 리그입니다.');
+  }
+
+  return _JoinedDraft(
+    leagueId: '${data['leagueId'] ?? ''}',
+    leagueName: '${data['leagueName'] ?? 'My League'}',
+    when: draftTime.toLocal(),
+    isSoccer: '${data['sport'] ?? 'soccer'}' == 'soccer',
+    teamCount: data['teamCount'] is int
+        ? data['teamCount'] as int
+        : int.tryParse('${data['teamCount'] ?? 8}') ?? 8,
+    memberCount: data['memberCount'] is int
+        ? data['memberCount'] as int
+        : int.tryParse('${data['memberCount'] ?? 1}') ?? 1,
+    inviteCode: '${data['inviteCode'] ?? fallbackCode}',
+    ownerId: '${data['ownerId'] ?? ''}',
+    draftOrder:
+        (data['draftOrder'] as List<dynamic>? ?? const [])
+            .whereType<Map>()
+            .map(
+              (item) => _DraftOrderEntry(
+                uid: '${item['uid'] ?? ''}',
+                displayName: '${item['displayName'] ?? 'Team'}',
+                slot: item['slot'] is int
+                    ? item['slot'] as int
+                    : int.tryParse('${item['slot'] ?? 0}') ?? 0,
+              ),
+            )
+            .toList()
+          ..sort((a, b) => a.slot.compareTo(b.slot)),
+  );
 }
 
 class _DraftOrderEntry {
@@ -120,26 +787,74 @@ class _DraftOrderEntry {
     required this.displayName,
     required this.slot,
   });
+
+  Map<String, dynamic> toMap() => {
+    'uid': uid,
+    'displayName': displayName,
+    'slot': slot,
+  };
 }
 
 class _FantasyTeamPlayer {
   final String name;
   final String position;
   final int score;
+  final String club;
+  final int number;
+  final String playerId;
 
   const _FantasyTeamPlayer({
     required this.name,
     required this.position,
     required this.score,
+    this.club = '',
+    this.number = 0,
+    this.playerId = '',
   });
 
-  _PlayerSlot toPlayerSlot() =>
-      _PlayerSlot(name: name, score: score, position: position);
+  _PlayerSlot toPlayerSlot() => _PlayerSlot(
+    name: name,
+    score: score,
+    position: position,
+    club: club,
+    number: number,
+    playerId: playerId,
+  );
 
   Map<String, dynamic> toMap() => {
     'name': name,
     'position': position,
     'score': score,
+    'club': club,
+    'number': number,
+    'playerId': playerId,
+  };
+}
+
+class _KboFantasyRoundScoreState {
+  final int round;
+  final double bankedScore;
+  final Map<String, double> starterBaselines;
+  final DateTime updatedAt;
+  final double? unlockedScoreSnapshot;
+  final DateTime? unlockedAt;
+
+  const _KboFantasyRoundScoreState({
+    required this.round,
+    required this.bankedScore,
+    required this.starterBaselines,
+    required this.updatedAt,
+    this.unlockedScoreSnapshot,
+    this.unlockedAt,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'round': round,
+    'bankedScore': bankedScore,
+    'starterBaselines': starterBaselines,
+    'updatedAt': updatedAt.toIso8601String(),
+    'unlockedScoreSnapshot': unlockedScoreSnapshot,
+    'unlockedAt': unlockedAt?.toIso8601String(),
   };
 }
 
@@ -149,6 +864,11 @@ class _FantasyTeamState {
   final List<_FantasyTeamPlayer> roster;
   final List<_FantasyTeamPlayer> starting;
   final List<_FantasyTeamPlayer> bench;
+  final String? captainName;
+  final String? viceCaptainName;
+  final String? captainPlayerId;
+  final String? viceCaptainPlayerId;
+  final List<_KboFantasyRoundScoreState> kboRoundScoreStates;
 
   const _FantasyTeamState({
     required this.uid,
@@ -156,6 +876,11 @@ class _FantasyTeamState {
     this.roster = const [],
     this.starting = const [],
     this.bench = const [],
+    this.captainName,
+    this.viceCaptainName,
+    this.captainPlayerId,
+    this.viceCaptainPlayerId,
+    this.kboRoundScoreStates = const [],
   });
 
   Map<String, dynamic> toMap() => {
@@ -164,7 +889,127 @@ class _FantasyTeamState {
     'roster': roster.map((player) => player.toMap()).toList(),
     'starting': starting.map((player) => player.toMap()).toList(),
     'bench': bench.map((player) => player.toMap()).toList(),
+    'captainName': captainName,
+    'viceCaptainName': viceCaptainName,
+    'captainPlayerId': captainPlayerId,
+    'viceCaptainPlayerId': viceCaptainPlayerId,
+    'kboRoundScoreStates': kboRoundScoreStates
+        .map((state) => state.toMap())
+        .toList(),
   };
+}
+
+bool _isBaseballHitterPosition(String position) {
+  switch (position.trim().toUpperCase()) {
+    case 'C':
+    case 'IF':
+    case 'OF':
+    case 'DH':
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool _isValidBaseballStartingLineup<T>(
+  List<T> starting, {
+  required String Function(T player) positionOf,
+}) {
+  if (starting.length != 10) return false;
+  final pitchers = starting.where((p) => positionOf(p) == 'P').length;
+  final catchers = starting.where((p) => positionOf(p) == 'C').length;
+  final infielders = starting.where((p) => positionOf(p) == 'IF').length;
+  final outfielders = starting.where((p) => positionOf(p) == 'OF').length;
+  final designatedHitters = starting.where((p) => positionOf(p) == 'DH').length;
+  final hitters = catchers + infielders + outfielders + designatedHitters;
+  final extraHitters =
+      (catchers - 1) + (infielders - 4) + (outfielders - 3) + designatedHitters;
+  return pitchers == 1 &&
+      catchers >= 1 &&
+      infielders >= 4 &&
+      outfielders >= 3 &&
+      hitters == 9 &&
+      extraHitters == 1;
+}
+
+List<T> _buildBaseballStartingFromRoster<T>(
+  List<T> roster, {
+  required String Function(T player) positionOf,
+  required int Function(T player) scoreOf,
+  required String Function(T player) identityOf,
+}) {
+  List<T> sortedPlayers(String position) {
+    final players = roster.where((p) => positionOf(p) == position).toList();
+    players.sort((a, b) => scoreOf(b).compareTo(scoreOf(a)));
+    return players;
+  }
+
+  final catchers = sortedPlayers('C');
+  final pitchers = sortedPlayers('P');
+  final infielders = sortedPlayers('IF');
+  final outfielders = sortedPlayers('OF');
+
+  final starting = <T>[
+    ...catchers.take(1),
+    ...pitchers.take(1),
+    ...infielders.take(4),
+    ...outfielders.take(3),
+  ];
+  final usedIds = starting.map(identityOf).toSet();
+  final dhCandidates =
+      roster
+          .where(
+            (player) =>
+                _isBaseballHitterPosition(positionOf(player)) &&
+                !usedIds.contains(identityOf(player)),
+          )
+          .toList()
+        ..sort((a, b) => scoreOf(b).compareTo(scoreOf(a)));
+  if (dhCandidates.isNotEmpty) {
+    starting.add(dhCandidates.first);
+  }
+  return starting;
+}
+
+_FantasyTeamState _normalizeBaseballFantasyTeam(_FantasyTeamState team) {
+  if (_isValidBaseballStartingLineup(
+    team.starting,
+    positionOf: (player) => player.position,
+  )) {
+    return team;
+  }
+
+  final roster = team.roster.isNotEmpty
+      ? team.roster
+      : [...team.starting, ...team.bench];
+  if (roster.isEmpty) return team;
+
+  final starting = _buildBaseballStartingFromRoster(
+    roster,
+    positionOf: (player) => player.position,
+    scoreOf: (player) => player.score,
+    identityOf: (player) => _fantasyTeamPlayerIdentity(player),
+  );
+  if (starting.isEmpty) return team;
+
+  final startingIds = starting.map(_fantasyTeamPlayerIdentity).toSet();
+  final bench = roster
+      .where(
+        (player) => !startingIds.contains(_fantasyTeamPlayerIdentity(player)),
+      )
+      .toList();
+  return _FantasyTeamState(
+    uid: team.uid,
+    teamName: team.teamName,
+    roster: roster,
+    starting: starting,
+    bench: bench,
+    captainName: team.captainName,
+    viceCaptainName: team.viceCaptainName,
+    captainPlayerId: team.captainPlayerId,
+    viceCaptainPlayerId: team.viceCaptainPlayerId,
+    kboRoundScoreStates: team.kboRoundScoreStates,
+  );
 }
 
 class _FantasyTeamBranding {
@@ -223,6 +1068,128 @@ _FantasyTeamBranding _fantasyTeamBrandingFor({
   return _fantasyTeamBrandings[index];
 }
 
+class _FantasyTeamAvatar extends StatelessWidget {
+  final String uid;
+  final String teamName;
+  final double size;
+  final double iconSize;
+
+  const _FantasyTeamAvatar({
+    required this.uid,
+    required this.teamName,
+    required this.size,
+    required this.iconSize,
+  });
+
+  bool get _isCurrentUsersTeam {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid.trim() ?? '';
+    return currentUid.isNotEmpty && uid.trim() == currentUid;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final branding = _fantasyTeamBrandingFor(uid: uid, teamName: teamName);
+    unawaited(_ensureProfileAvatarPathLoaded());
+    if (uid.trim().isNotEmpty) {
+      unawaited(_ensurePublicProfileAvatarUrlLoaded(uid));
+    }
+
+    Widget fallbackAvatar() {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: branding.tint,
+          border: Border.all(color: Colors.black12),
+        ),
+        child: Icon(
+          branding.icon,
+          size: iconSize,
+          color: _FantasyTeamBranding.defaultIconColor,
+        ),
+      );
+    }
+
+    Widget publicAvatar(String? photoUrl) {
+      final normalizedUrl = photoUrl?.trim() ?? '';
+      if (normalizedUrl.isEmpty) {
+        return fallbackAvatar();
+      }
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.black12),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Image.network(
+          normalizedUrl,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            debugPrint(
+              'Fantasy avatar network load failed '
+              '(uid=$uid, url=$normalizedUrl): $error',
+            );
+            if (stackTrace != null) {
+              debugPrint('$stackTrace');
+            }
+            return fallbackAvatar();
+          },
+        ),
+      );
+    }
+
+    if (!_isCurrentUsersTeam) {
+      return ValueListenableBuilder<String?>(
+        valueListenable: _publicProfileAvatarUrlNotifierFor(uid.trim()),
+        builder: (context, photoUrl, _) => publicAvatar(photoUrl),
+      );
+    }
+
+    return ValueListenableBuilder<String?>(
+      valueListenable: _profileAvatarPathNotifier,
+      builder: (context, avatarPath, _) {
+        final normalizedPath = avatarPath?.trim() ?? '';
+        if (normalizedPath.isEmpty) {
+          final currentPhotoUrl =
+              FirebaseAuth.instance.currentUser?.photoURL?.trim() ?? '';
+          if (currentPhotoUrl.isNotEmpty) {
+            return publicAvatar(currentPhotoUrl);
+          }
+          return ValueListenableBuilder<String?>(
+            valueListenable: _publicProfileAvatarUrlNotifierFor(uid.trim()),
+            builder: (context, photoUrl, _) => publicAvatar(photoUrl),
+          );
+        }
+        final avatarFile = File(normalizedPath);
+        if (!avatarFile.existsSync()) {
+          final currentPhotoUrl =
+              FirebaseAuth.instance.currentUser?.photoURL?.trim() ?? '';
+          if (currentPhotoUrl.isNotEmpty) {
+            return publicAvatar(currentPhotoUrl);
+          }
+          return ValueListenableBuilder<String?>(
+            valueListenable: _publicProfileAvatarUrlNotifierFor(uid.trim()),
+            builder: (context, photoUrl, _) => publicAvatar(photoUrl),
+          );
+        }
+        return Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: Colors.black12),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Image.file(avatarFile, fit: BoxFit.cover),
+        );
+      },
+    );
+  }
+}
+
 class _FantasyScheduleMatchup {
   final int round;
   final String homeUid;
@@ -247,12 +1214,94 @@ class _FantasyScheduleMatchup {
   };
 }
 
+_JoinedDraft _joinedDraftWithRenamedFantasyIdentity(
+  _JoinedDraft draft, {
+  required String uid,
+  required String teamName,
+}) {
+  final normalizedUid = uid.trim();
+  final normalizedTeamName = teamName.trim();
+  if (normalizedUid.isEmpty || normalizedTeamName.isEmpty) {
+    return draft;
+  }
+
+  var changed = false;
+  final updatedDraftOrder = draft.draftOrder.map((entry) {
+    if (entry.uid != normalizedUid || entry.displayName == normalizedTeamName) {
+      return entry;
+    }
+    changed = true;
+    return _DraftOrderEntry(
+      uid: entry.uid,
+      displayName: normalizedTeamName,
+      slot: entry.slot,
+    );
+  }).toList();
+
+  final updatedFantasyTeams = draft.fantasyTeams.map((team) {
+    if (team.uid != normalizedUid || team.teamName == normalizedTeamName) {
+      return team;
+    }
+    changed = true;
+    return _FantasyTeamState(
+      uid: team.uid,
+      teamName: normalizedTeamName,
+      roster: team.roster,
+      starting: team.starting,
+      bench: team.bench,
+      captainName: team.captainName,
+      viceCaptainName: team.viceCaptainName,
+      captainPlayerId: team.captainPlayerId,
+      viceCaptainPlayerId: team.viceCaptainPlayerId,
+      kboRoundScoreStates: team.kboRoundScoreStates,
+    );
+  }).toList();
+
+  final updatedFantasySchedule = draft.fantasySchedule.map((matchup) {
+    final homeChanged =
+        matchup.homeUid == normalizedUid &&
+        matchup.homeTeam != normalizedTeamName;
+    final awayChanged =
+        matchup.awayUid == normalizedUid &&
+        matchup.awayTeam != normalizedTeamName;
+    if (!homeChanged && !awayChanged) return matchup;
+    changed = true;
+    return _FantasyScheduleMatchup(
+      round: matchup.round,
+      homeUid: matchup.homeUid,
+      homeTeam: homeChanged ? normalizedTeamName : matchup.homeTeam,
+      awayUid: matchup.awayUid,
+      awayTeam: awayChanged ? normalizedTeamName : matchup.awayTeam,
+    );
+  }).toList();
+
+  if (!changed) return draft;
+
+  return _JoinedDraft(
+    leagueId: draft.leagueId,
+    leagueName: draft.leagueName,
+    when: draft.when,
+    isSoccer: draft.isSoccer,
+    teamCount: draft.teamCount,
+    roundCount: draft.roundCount,
+    memberCount: draft.memberCount,
+    inviteCode: draft.inviteCode,
+    ownerId: draft.ownerId,
+    draftOrder: updatedDraftOrder,
+    fantasyReady: draft.fantasyReady,
+    fantasyTeams: updatedFantasyTeams,
+    fantasySchedule: updatedFantasySchedule,
+    draftBoard: draft.draftBoard,
+  );
+}
+
 class _FantasyMatchupView {
   final _JoinedDraft draft;
   final int round;
   final _FantasyScheduleMatchup matchup;
   final _FantasyTeamState myTeam;
   final _FantasyTeamState opponent;
+  final bool scoresReady;
   final double myScore;
   final double opponentScore;
 
@@ -262,6 +1311,7 @@ class _FantasyMatchupView {
     required this.matchup,
     required this.myTeam,
     required this.opponent,
+    required this.scoresReady,
     required this.myScore,
     required this.opponentScore,
   });
@@ -296,16 +1346,413 @@ bool _isDraftExpiredAt(_JoinedDraft draft, DateTime now) {
   return !now.isBefore(draft.when.add(_draftRetentionWindow));
 }
 
+bool _isUnfilledDraftCanceledAt(_JoinedDraft draft, DateTime now) {
+  if (draft.fantasyReady) return false;
+  if (draft.teamCount <= 0) return false;
+  if (draft.memberCount >= draft.teamCount) return false;
+  return !now.isBefore(draft.when);
+}
+
 Duration _fantasyRoundInterval(bool isSoccer) =>
     isSoccer ? const Duration(days: 7) : const Duration(days: 1);
+
+class _KboFantasyRoundWindow {
+  final int round;
+  final DateTime startKst;
+  final DateTime endKst;
+
+  const _KboFantasyRoundWindow({
+    required this.round,
+    required this.startKst,
+    required this.endKst,
+  });
+}
+
+const int _kboFantasyTotalRounds2026 = 24;
+
+final List<_KboFantasyRoundWindow> _kboFantasyRoundWindows2026 =
+    <_KboFantasyRoundWindow>[
+      _KboFantasyRoundWindow(
+        round: 1,
+        startKst: DateTime(2026, 3, 28),
+        endKst: DateTime(2026, 3, 29),
+      ),
+      _KboFantasyRoundWindow(
+        round: 2,
+        startKst: DateTime(2026, 3, 31),
+        endKst: DateTime(2026, 4, 5),
+      ),
+      _KboFantasyRoundWindow(
+        round: 3,
+        startKst: DateTime(2026, 4, 7),
+        endKst: DateTime(2026, 4, 12),
+      ),
+      _KboFantasyRoundWindow(
+        round: 4,
+        startKst: DateTime(2026, 4, 14),
+        endKst: DateTime(2026, 4, 19),
+      ),
+      _KboFantasyRoundWindow(
+        round: 5,
+        startKst: DateTime(2026, 4, 21),
+        endKst: DateTime(2026, 4, 26),
+      ),
+      _KboFantasyRoundWindow(
+        round: 6,
+        startKst: DateTime(2026, 4, 28),
+        endKst: DateTime(2026, 5, 3),
+      ),
+      _KboFantasyRoundWindow(
+        round: 7,
+        startKst: DateTime(2026, 5, 5),
+        endKst: DateTime(2026, 5, 10),
+      ),
+      _KboFantasyRoundWindow(
+        round: 8,
+        startKst: DateTime(2026, 5, 12),
+        endKst: DateTime(2026, 5, 17),
+      ),
+      _KboFantasyRoundWindow(
+        round: 9,
+        startKst: DateTime(2026, 5, 19),
+        endKst: DateTime(2026, 5, 24),
+      ),
+      _KboFantasyRoundWindow(
+        round: 10,
+        startKst: DateTime(2026, 5, 26),
+        endKst: DateTime(2026, 5, 31),
+      ),
+      _KboFantasyRoundWindow(
+        round: 11,
+        startKst: DateTime(2026, 6, 2),
+        endKst: DateTime(2026, 6, 7),
+      ),
+      _KboFantasyRoundWindow(
+        round: 12,
+        startKst: DateTime(2026, 6, 9),
+        endKst: DateTime(2026, 6, 14),
+      ),
+      _KboFantasyRoundWindow(
+        round: 13,
+        startKst: DateTime(2026, 6, 16),
+        endKst: DateTime(2026, 6, 21),
+      ),
+      _KboFantasyRoundWindow(
+        round: 14,
+        startKst: DateTime(2026, 6, 23),
+        endKst: DateTime(2026, 6, 28),
+      ),
+      _KboFantasyRoundWindow(
+        round: 15,
+        startKst: DateTime(2026, 6, 30),
+        endKst: DateTime(2026, 7, 5),
+      ),
+      _KboFantasyRoundWindow(
+        round: 16,
+        startKst: DateTime(2026, 7, 7),
+        endKst: DateTime(2026, 7, 9),
+      ),
+      _KboFantasyRoundWindow(
+        round: 17,
+        startKst: DateTime(2026, 7, 16),
+        endKst: DateTime(2026, 7, 19),
+      ),
+      _KboFantasyRoundWindow(
+        round: 18,
+        startKst: DateTime(2026, 7, 21),
+        endKst: DateTime(2026, 7, 26),
+      ),
+      _KboFantasyRoundWindow(
+        round: 19,
+        startKst: DateTime(2026, 7, 28),
+        endKst: DateTime(2026, 8, 2),
+      ),
+      _KboFantasyRoundWindow(
+        round: 20,
+        startKst: DateTime(2026, 8, 4),
+        endKst: DateTime(2026, 8, 9),
+      ),
+      _KboFantasyRoundWindow(
+        round: 21,
+        startKst: DateTime(2026, 8, 11),
+        endKst: DateTime(2026, 8, 16),
+      ),
+      _KboFantasyRoundWindow(
+        round: 22,
+        startKst: DateTime(2026, 8, 18),
+        endKst: DateTime(2026, 8, 23),
+      ),
+      _KboFantasyRoundWindow(
+        round: 23,
+        startKst: DateTime(2026, 8, 25),
+        endKst: DateTime(2026, 8, 30),
+      ),
+      _KboFantasyRoundWindow(
+        round: 24,
+        startKst: DateTime(2026, 9, 1),
+        endKst: DateTime(2026, 9, 6),
+      ),
+    ];
+
+DateTime _kstDayOnly(DateTime value) {
+  final kst = _toKst(value);
+  return DateTime(kst.year, kst.month, kst.day);
+}
+
+bool _kboFantasyRoundContainsDay(DateTime day, _KboFantasyRoundWindow window) {
+  return !day.isBefore(window.startKst) && !day.isAfter(window.endKst);
+}
+
+int _anchorKboRoundForDraft(DateTime? draftAt) {
+  final windows = _kboFantasyRoundWindows2026;
+  if (windows.isEmpty || draftAt == null) return 1;
+
+  final draftDay = _kstDayOnly(draftAt);
+  if (draftDay.isBefore(windows.first.startKst)) return windows.first.round;
+
+  for (final window in windows) {
+    if (draftDay.isBefore(window.startKst)) {
+      return window.round;
+    }
+    if (_kboFantasyRoundContainsDay(draftDay, window)) {
+      return min(_kboFantasyTotalRounds2026, window.round + 1);
+    }
+  }
+
+  return windows.last.round;
+}
+
+int _currentKboRoundAt(DateTime now) {
+  final windows = _kboFantasyRoundWindows2026;
+  if (windows.isEmpty) return 1;
+
+  final nowDay = _kstDayOnly(now);
+  if (nowDay.isBefore(windows.first.startKst)) return windows.first.round;
+
+  var currentRound = windows.first.round;
+  for (final window in windows) {
+    if (nowDay.isBefore(window.startKst)) return currentRound;
+    if (_kboFantasyRoundContainsDay(nowDay, window)) return window.round;
+    currentRound = window.round;
+  }
+
+  return windows.last.round;
+}
+
+int _kboFantasyRoundCountForDraft(DateTime? draftAt) {
+  final anchorRound = _anchorKboRoundForDraft(draftAt);
+  return max(1, _kboFantasyTotalRounds2026 - anchorRound + 1);
+}
+
+int _mappedKboRoundForFantasyRound(_JoinedDraft draft, int fantasyRound) {
+  final anchorRound = _anchorKboRoundForDraft(draft.when);
+  return (anchorRound + fantasyRound - 1).clamp(1, _kboFantasyTotalRounds2026);
+}
+
+bool _kboFantasyRoundHasStarted(
+  _JoinedDraft draft,
+  int fantasyRound,
+  DateTime now,
+) {
+  if (draft.isSoccer || fantasyRound <= 0) return false;
+  final mappedRound = _mappedKboRoundForFantasyRound(draft, fantasyRound);
+  final window = _kboFantasyRoundWindows2026
+      .cast<_KboFantasyRoundWindow?>()
+      .firstWhere((entry) => entry?.round == mappedRound, orElse: () => null);
+  if (window == null) return false;
+  final nowDay = _kstDayOnly(now);
+  return !nowDay.isBefore(window.startKst);
+}
+
+int _defaultFantasyRoundCount({required bool isSoccer, DateTime? draftAt}) {
+  if (isSoccer) {
+    final cachedLeagueData = _cachedKLeagueLeagueData;
+    final rawFixtures = _fixtureAsList(cachedLeagueData?['fixtures']);
+    if (rawFixtures.isNotEmpty) {
+      return _kLeagueFantasyRoundCountForDraft(draftAt, rawFixtures);
+    }
+    return _kLeagueFantasyTotalRounds2026;
+  }
+  return _kboFantasyRoundCountForDraft(draftAt);
+}
 
 int _currentFantasyRoundAt(_JoinedDraft draft, DateTime now) {
   final roundCount = max(1, draft.roundCount);
   if (now.isBefore(draft.when)) return 1;
+  if (draft.isSoccer) {
+    final cachedLeagueData = _cachedKLeagueLeagueData;
+    if (cachedLeagueData != null) {
+      final rawFixtures = _fixtureAsList(cachedLeagueData['fixtures']);
+      final windows = _kLeagueRoundWindowsFromFixtures(rawFixtures);
+      if (windows.isNotEmpty) {
+        final anchorRound = _anchorKLeagueRoundForDraft(draft.when, windows);
+        final currentRound = min(
+          _currentKLeagueRoundAt(now, windows),
+          _kLeagueFantasyMaxRound(windows),
+        );
+        final mappedRound = currentRound - anchorRound + 1;
+        return mappedRound.clamp(1, roundCount);
+      }
+    }
+  } else {
+    final anchorRound = _anchorKboRoundForDraft(draft.when);
+    final currentRound = _currentKboRoundAt(now);
+    final mappedRound = currentRound - anchorRound + 1;
+    return mappedRound.clamp(1, roundCount);
+  }
   final interval = _fantasyRoundInterval(draft.isSoccer);
   final elapsed = now.difference(draft.when);
   final round = (elapsed.inSeconds ~/ interval.inSeconds) + 1;
   return round.clamp(1, roundCount);
+}
+
+class _KLeagueRoundWindow {
+  final int round;
+  final DateTime startUtc;
+  final DateTime endUtc;
+
+  const _KLeagueRoundWindow({
+    required this.round,
+    required this.startUtc,
+    required this.endUtc,
+  });
+}
+
+const int _kLeagueFantasyTotalRounds2026 = 33;
+const Duration _kLeagueRoundAdvanceDelay = Duration(hours: 12);
+const Duration _kLeagueFixtureDurationEstimate = Duration(hours: 2);
+
+DateTime? _kLeagueFixtureEstimatedEndUtc(Map<String, dynamic> fixtureMap) {
+  final fixture = _fixtureAsMap(fixtureMap['fixture']);
+  final kickoff = DateTime.tryParse(_fixtureText(fixture['date']))?.toUtc();
+  if (kickoff == null) return null;
+  final status = _fixtureAsMap(fixture['status']);
+  final elapsed = _readNullableInt(status['elapsed']) ?? 0;
+  final estimatedMinutes = elapsed > 0
+      ? max(120, elapsed)
+      : _kLeagueFixtureDurationEstimate.inMinutes;
+  return kickoff.add(Duration(minutes: estimatedMinutes));
+}
+
+DateTime _kLeagueRoundAdvanceUtc(_KLeagueRoundWindow window) =>
+    window.endUtc.add(_kLeagueRoundAdvanceDelay);
+
+List<_KLeagueRoundWindow> _kLeagueRoundWindowsFromFixtures(
+  List<dynamic> rawFixtures,
+) {
+  final byRound = <int, ({DateTime startUtc, DateTime endUtc})>{};
+  for (final raw in rawFixtures) {
+    final map = _fixtureAsMap(raw);
+    final league = _fixtureAsMap(map['league']);
+    final round = _roundNumber(_fixtureText(league['round']));
+    if (round <= 0) continue;
+    final fixture = _fixtureAsMap(map['fixture']);
+    final kickoff = DateTime.tryParse(_fixtureText(fixture['date']))?.toUtc();
+    final estimatedEnd = _kLeagueFixtureEstimatedEndUtc(map);
+    if (kickoff == null || estimatedEnd == null) continue;
+    final existing = byRound[round];
+    if (existing == null) {
+      byRound[round] = (startUtc: kickoff, endUtc: estimatedEnd);
+      continue;
+    }
+    byRound[round] = (
+      startUtc: kickoff.isBefore(existing.startUtc)
+          ? kickoff
+          : existing.startUtc,
+      endUtc: estimatedEnd.isAfter(existing.endUtc)
+          ? estimatedEnd
+          : existing.endUtc,
+    );
+  }
+
+  final windows =
+      byRound.entries
+          .map(
+            (entry) => _KLeagueRoundWindow(
+              round: entry.key,
+              startUtc: entry.value.startUtc,
+              endUtc: entry.value.endUtc,
+            ),
+          )
+          .toList()
+        ..sort((a, b) => a.round.compareTo(b.round));
+  return windows;
+}
+
+int _kLeagueFantasyMaxRound(List<_KLeagueRoundWindow> windows) {
+  if (windows.isEmpty) return _kLeagueFantasyTotalRounds2026;
+  return min(_kLeagueFantasyTotalRounds2026, windows.last.round);
+}
+
+bool _kLeagueRoundContainsInstant(
+  DateTime instantUtc,
+  _KLeagueRoundWindow window,
+) {
+  return !instantUtc.isBefore(window.startUtc) &&
+      !instantUtc.isAfter(window.endUtc);
+}
+
+int _anchorKLeagueRoundForDraft(
+  DateTime? draftAt,
+  List<_KLeagueRoundWindow> windows,
+) {
+  if (windows.isEmpty || draftAt == null) return 1;
+  final fantasyMaxRound = _kLeagueFantasyMaxRound(windows);
+  final fantasyWindows = windows
+      .where((window) => window.round <= fantasyMaxRound)
+      .toList();
+  if (fantasyWindows.isEmpty) return 1;
+
+  final draftUtc = draftAt.toUtc();
+  if (draftUtc.isBefore(fantasyWindows.first.startUtc)) {
+    return fantasyWindows.first.round;
+  }
+
+  for (final window in fantasyWindows) {
+    if (draftUtc.isBefore(window.startUtc)) {
+      return window.round;
+    }
+    if (_kLeagueRoundContainsInstant(draftUtc, window)) {
+      return min(fantasyMaxRound, window.round + 1);
+    }
+  }
+
+  return fantasyWindows.last.round;
+}
+
+int _kLeagueFantasyRoundCountForDraft(
+  DateTime? draftAt,
+  List<dynamic> rawFixtures,
+) {
+  final windows = _kLeagueRoundWindowsFromFixtures(rawFixtures);
+  final fantasyMaxRound = _kLeagueFantasyMaxRound(windows);
+  final anchorRound = _anchorKLeagueRoundForDraft(draftAt, windows);
+  return max(1, fantasyMaxRound - anchorRound + 1);
+}
+
+int _currentKLeagueRoundAt(DateTime now, List<_KLeagueRoundWindow> windows) {
+  if (windows.isEmpty) return 1;
+  final nowUtc = now.toUtc();
+  if (nowUtc.isBefore(windows.first.startUtc)) return windows.first.round;
+  for (final window in windows) {
+    if (!nowUtc.isAfter(_kLeagueRoundAdvanceUtc(window))) {
+      return window.round;
+    }
+  }
+  return windows.last.round;
+}
+
+int _mappedKLeagueRoundForFantasyRound(
+  _JoinedDraft draft,
+  int fantasyRound,
+  List<dynamic> rawFixtures,
+) {
+  final windows = _kLeagueRoundWindowsFromFixtures(rawFixtures);
+  if (windows.isEmpty) return max(1, fantasyRound);
+  final anchorRound = _anchorKLeagueRoundForDraft(draft.when, windows);
+  final fantasyMaxRound = _kLeagueFantasyMaxRound(windows);
+  final mappedRound = anchorRound + fantasyRound - 1;
+  return mappedRound.clamp(windows.first.round, fantasyMaxRound);
 }
 
 const Duration _fantasySoccerScoreCacheTtl = Duration(seconds: 20);
@@ -320,6 +1767,8 @@ class _FantasySoccerRoundScoreSnapshot {
   final Map<String, double> teamScores;
   final Map<String, String?> captainNames;
   final Map<String, String?> viceCaptainNames;
+  final Map<String, String?> captainPlayerIds;
+  final Map<String, String?> viceCaptainPlayerIds;
 
   const _FantasySoccerRoundScoreSnapshot({
     required this.leagueId,
@@ -331,6 +1780,8 @@ class _FantasySoccerRoundScoreSnapshot {
     required this.teamScores,
     required this.captainNames,
     required this.viceCaptainNames,
+    required this.captainPlayerIds,
+    required this.viceCaptainPlayerIds,
   });
 }
 
@@ -339,15 +1790,179 @@ _fantasySoccerRoundScoreCache = <String, _FantasySoccerRoundScoreSnapshot>{};
 final Map<String, Future<_FantasySoccerRoundScoreSnapshot>>
 _fantasySoccerRoundScoreInFlight =
     <String, Future<_FantasySoccerRoundScoreSnapshot>>{};
+const FlutterSecureStorage _fantasySoccerRoundScoreStorage =
+    FlutterSecureStorage(
+      iOptions: IOSOptions(accountName: 'leagueit_local_state'),
+    );
+const String _fantasySoccerRoundScoreStorageKey =
+    'fantasy_soccer_round_scores.v1';
+const int _fantasySoccerRoundScoreStorageMaxEntries = 48;
+Future<void>? _fantasySoccerRoundScoreRestoreFuture;
+
+Map<String, dynamic> _fantasySoccerRoundScoreSnapshotToJson(
+  _FantasySoccerRoundScoreSnapshot snapshot,
+) => <String, dynamic>{
+  'leagueId': snapshot.leagueId,
+  'round': snapshot.round,
+  'generatedAt': snapshot.generatedAt.toIso8601String(),
+  'finalized': snapshot.finalized,
+  'basePlayerScores': snapshot.basePlayerScores,
+  'displayedPlayerScores': snapshot.displayedPlayerScores,
+  'teamScores': snapshot.teamScores,
+  'captainNames': snapshot.captainNames,
+  'viceCaptainNames': snapshot.viceCaptainNames,
+  'captainPlayerIds': snapshot.captainPlayerIds,
+  'viceCaptainPlayerIds': snapshot.viceCaptainPlayerIds,
+};
+
+Map<String, double> _fantasySoccerDoubleMapFromJson(dynamic raw) {
+  final source = _fixtureAsMap(raw);
+  final result = <String, double>{};
+  for (final entry in source.entries) {
+    final value = (entry.value as num?)?.toDouble();
+    if (value == null) continue;
+    result[entry.key] = value;
+  }
+  return result;
+}
+
+Map<String, String?> _fantasySoccerNullableStringMapFromJson(dynamic raw) {
+  final source = _fixtureAsMap(raw);
+  final result = <String, String?>{};
+  for (final entry in source.entries) {
+    final value = '${entry.value ?? ''}'.trim();
+    result[entry.key] = value.isEmpty ? null : value;
+  }
+  return result;
+}
+
+_FantasySoccerRoundScoreSnapshot? _fantasySoccerRoundScoreSnapshotFromJson(
+  dynamic raw,
+) {
+  final json = _fixtureAsMap(raw);
+  final leagueId = '${json['leagueId'] ?? ''}'.trim();
+  final round = _readNullableInt(json['round']) ?? 0;
+  final generatedAt = DateTime.tryParse('${json['generatedAt'] ?? ''}');
+  if (leagueId.isEmpty || round <= 0 || generatedAt == null) return null;
+  return _FantasySoccerRoundScoreSnapshot(
+    leagueId: leagueId,
+    round: round,
+    generatedAt: generatedAt,
+    finalized: json['finalized'] == true,
+    basePlayerScores: _fantasySoccerDoubleMapFromJson(json['basePlayerScores']),
+    displayedPlayerScores: _fantasySoccerDoubleMapFromJson(
+      json['displayedPlayerScores'],
+    ),
+    teamScores: _fantasySoccerDoubleMapFromJson(json['teamScores']),
+    captainNames: _fantasySoccerNullableStringMapFromJson(json['captainNames']),
+    viceCaptainNames: _fantasySoccerNullableStringMapFromJson(
+      json['viceCaptainNames'],
+    ),
+    captainPlayerIds: _fantasySoccerNullableStringMapFromJson(
+      json['captainPlayerIds'],
+    ),
+    viceCaptainPlayerIds: _fantasySoccerNullableStringMapFromJson(
+      json['viceCaptainPlayerIds'],
+    ),
+  );
+}
+
+Future<void> _restorePersistedFantasySoccerRoundScoreCache() {
+  final inFlight = _fantasySoccerRoundScoreRestoreFuture;
+  if (inFlight != null) return inFlight;
+  final future =
+      () async {
+        try {
+          final raw = await _readLocalStateCacheWithLegacySecureStorage(
+            key: _fantasySoccerRoundScoreStorageKey,
+            legacyStorage: _fantasySoccerRoundScoreStorage,
+          );
+          if (raw == null || raw.trim().isEmpty) return;
+          final decoded = jsonDecode(raw);
+          final entries = _fixtureAsMap(_fixtureAsMap(decoded)['entries']);
+          for (final entry in entries.entries) {
+            final snapshot = _fantasySoccerRoundScoreSnapshotFromJson(
+              entry.value,
+            );
+            if (snapshot == null) continue;
+            _fantasySoccerRoundScoreCache[entry.key] = snapshot;
+          }
+        } catch (error, stackTrace) {
+          debugPrint(
+            'restorePersistedFantasySoccerRoundScoreCache failed: $error',
+          );
+          debugPrint('$stackTrace');
+        }
+      }().whenComplete(() {
+        _fantasySoccerRoundScoreRestoreFuture = null;
+      });
+  _fantasySoccerRoundScoreRestoreFuture = future;
+  return future;
+}
+
+Future<void> _persistFantasySoccerRoundScoreCache() async {
+  try {
+    final entries = _fantasySoccerRoundScoreCache.entries.toList()
+      ..sort((a, b) => b.value.generatedAt.compareTo(a.value.generatedAt));
+    final payload = <String, dynamic>{
+      'entries': <String, dynamic>{
+        for (final entry in entries.take(
+          _fantasySoccerRoundScoreStorageMaxEntries,
+        ))
+          entry.key: _fantasySoccerRoundScoreSnapshotToJson(entry.value),
+      },
+    };
+    await _writeLocalStateCache(
+      _fantasySoccerRoundScoreStorageKey,
+      jsonEncode(payload),
+    );
+  } catch (error, stackTrace) {
+    debugPrint('persistFantasySoccerRoundScoreCache failed: $error');
+    debugPrint('$stackTrace');
+  }
+}
 
 String _fantasyTeamIdentity({required String uid, required String teamName}) =>
     uid.trim().isNotEmpty ? uid.trim() : teamName.trim();
+
+String _fantasyPlayerIdentity({
+  required String name,
+  String club = '',
+  int number = 0,
+  String playerId = '',
+}) {
+  final explicit = playerId.trim();
+  if (explicit.isNotEmpty) return explicit;
+  final canonicalClub = _canonicalKLeagueClub(_kLeagueDisplayTeamName(club));
+  if (canonicalClub.isNotEmpty && number > 0) {
+    return '$canonicalClub|$number|${name.trim()}';
+  }
+  return name.trim();
+}
+
+String _playerSlotIdentity(_PlayerSlot slot) => _fantasyPlayerIdentity(
+  name: slot.name,
+  club: slot.club,
+  number: slot.number,
+  playerId: slot.playerId,
+);
+
+String _fantasyTeamPlayerIdentity(_FantasyTeamPlayer player) =>
+    _fantasyPlayerIdentity(
+      name: player.name,
+      club: player.club,
+      number: player.number,
+      playerId: player.playerId,
+    );
 
 String _fantasySoccerPlayerCacheKey({
   required String teamUid,
   required String teamName,
   required String playerName,
-}) => '${_fantasyTeamIdentity(uid: teamUid, teamName: teamName)}|$playerName';
+  String playerId = '',
+}) =>
+    '${_fantasyTeamIdentity(uid: teamUid, teamName: teamName)}|'
+    '${_fantasyPlayerIdentity(name: playerName, playerId: playerId)}';
 
 String _fantasySoccerRoundCacheKey(_JoinedDraft draft, int round) =>
     '${draft.leagueId}|$round';
@@ -457,8 +2072,9 @@ Map<String, int> _kLeagueOwnGoalCounts(
     final displayName = _eventPlayerDisplayName(player, playerNames);
     if (displayName.isEmpty) continue;
     final playerId = _fixtureText(player['id']);
-    final club = clubLookup[playerId].toString().trim().isNotEmpty
-        ? clubLookup[playerId]!
+    final directClub = clubLookup[playerId];
+    final club = (directClub != null && directClub.trim().isNotEmpty)
+        ? directClub
         : (clubLookup[displayName] ?? '');
     if (club.isEmpty) continue;
     final key = '$club|$displayName';
@@ -579,6 +2195,22 @@ String _kLeagueScoreLookupKeyFromDetail(
 Map<String, double> _kLeagueFantasyBaseScoresFromDetail(
   Map<String, dynamic> detail,
 ) {
+  return _kLeagueFantasyPlayerScoresFromDetail(detail).scores;
+}
+
+class _KLeagueDetailPlayerScoreBundle {
+  final Map<String, double> scores;
+  final Set<String> appearedKeys;
+
+  const _KLeagueDetailPlayerScoreBundle({
+    required this.scores,
+    required this.appearedKeys,
+  });
+}
+
+_KLeagueDetailPlayerScoreBundle _kLeagueFantasyPlayerScoresFromDetail(
+  Map<String, dynamic> detail,
+) {
   final detailFixture = _fixtureAsMap(detail['fixture']);
   final fixtureMeta = _fixtureAsMap(detailFixture['fixture']);
   final teams = _fixtureAsMap(detailFixture['teams']);
@@ -619,12 +2251,55 @@ Map<String, double> _kLeagueFantasyBaseScoresFromDetail(
   }
 
   final scores = <String, double>{};
+  final appearedKeys = <String>{};
   final subOutMinuteByKey = <String, int>{};
   final subInMinuteByKey = <String, int>{};
+  final statsMinutesByClubAndNumber = <String, int>{};
+  final statsSubstituteByClubAndNumber = <String, bool>{};
 
   void addScore(String key, double value) {
     if (key.isEmpty) return;
     scores.update(key, (current) => current + value, ifAbsent: () => value);
+  }
+
+  String resolveClub(Map<String, dynamic> playerLike, String displayName) {
+    final id = _fixtureText(playerLike['id']);
+    final directClub = clubLookup[id];
+    if (directClub != null && directClub.trim().isNotEmpty) {
+      return directClub;
+    }
+    return clubLookup[displayName] ?? '';
+  }
+
+  for (final rawTeamBlock in _fixtureAsList(detail['players'])) {
+    final teamBlock = _fixtureAsMap(rawTeamBlock);
+    final team = _fixtureAsMap(teamBlock['team']);
+    final club = _canonicalKLeagueClub(
+      _kLeagueDisplayTeamName(_fixtureText(team['name'])),
+    );
+    for (final rawPlayerBlock in _fixtureAsList(teamBlock['players'])) {
+      final playerBlock = _fixtureAsMap(rawPlayerBlock);
+      final player = _fixtureAsMap(playerBlock['player']);
+      final statsEntry = _fixtureAsMap(
+        _fixtureAsList(playerBlock['statistics']).isNotEmpty
+            ? _fixtureAsList(playerBlock['statistics']).first
+            : const <String, dynamic>{},
+      );
+      final games = _fixtureAsMap(statsEntry['games']);
+      final shirtNumber =
+          _readNullableInt(games['number'])?.toString() ??
+          _readNullableInt(player['number'])?.toString() ??
+          _fixtureText(player['number']);
+      if (shirtNumber.trim().isEmpty) continue;
+      final key = '$club|$shirtNumber';
+      final minutes = _readNullableInt(games['minutes']);
+      if (minutes != null) {
+        statsMinutesByClubAndNumber[key] = minutes;
+      }
+      if (games['substitute'] == true) {
+        statsSubstituteByClubAndNumber[key] = true;
+      }
+    }
   }
 
   for (final raw in events) {
@@ -638,14 +2313,8 @@ Map<String, double> _kLeagueFantasyBaseScoresFromDetail(
     if (type == 'subst' || type == 'Subst') {
       final outName = _eventPlayerDisplayName(player, playerNames);
       final inName = _eventPlayerDisplayName(assist, playerNames);
-      final outClub =
-          clubLookup[_fixtureText(player['id'])].toString().trim().isNotEmpty
-          ? clubLookup[_fixtureText(player['id'])]!
-          : (clubLookup[outName] ?? '');
-      final inClub =
-          clubLookup[_fixtureText(assist['id'])].toString().trim().isNotEmpty
-          ? clubLookup[_fixtureText(assist['id'])]!
-          : (clubLookup[inName] ?? '');
+      final outClub = resolveClub(player, outName);
+      final inClub = resolveClub(assist, inName);
       if (outName.isNotEmpty && outClub.isNotEmpty) {
         subOutMinuteByKey['$outClub|$outName'] = minute;
       }
@@ -657,10 +2326,7 @@ Map<String, double> _kLeagueFantasyBaseScoresFromDetail(
 
     if (type == 'Goal') {
       final scorerName = _eventPlayerDisplayName(player, playerNames);
-      final scorerClub =
-          clubLookup[_fixtureText(player['id'])].toString().trim().isNotEmpty
-          ? clubLookup[_fixtureText(player['id'])]!
-          : (clubLookup[scorerName] ?? '');
+      final scorerClub = resolveClub(player, scorerName);
       if (detailText == 'Own Goal') {
         // Handled from lineup-based own-goal map below.
       } else if (detailText == 'Missed Penalty') {
@@ -677,10 +2343,7 @@ Map<String, double> _kLeagueFantasyBaseScoresFromDetail(
       }
 
       final assistName = _eventPlayerDisplayName(assist, playerNames);
-      final assistClub =
-          clubLookup[_fixtureText(assist['id'])].toString().trim().isNotEmpty
-          ? clubLookup[_fixtureText(assist['id'])]!
-          : (clubLookup[assistName] ?? '');
+      final assistClub = resolveClub(assist, assistName);
       if (assistName.isNotEmpty && assistClub.isNotEmpty) {
         final assistPosition = _kLeagueEventPlayerPosition(
           assist,
@@ -697,10 +2360,7 @@ Map<String, double> _kLeagueFantasyBaseScoresFromDetail(
 
     if (type == 'Card') {
       final cardName = _eventPlayerDisplayName(player, playerNames);
-      final cardClub =
-          clubLookup[_fixtureText(player['id'])].toString().trim().isNotEmpty
-          ? clubLookup[_fixtureText(player['id'])]!
-          : (clubLookup[cardName] ?? '');
+      final cardClub = resolveClub(player, cardName);
       if (cardName.isEmpty || cardClub.isEmpty) continue;
       if (detailText.contains('Red')) {
         addScore('$cardClub|$cardName', -3);
@@ -728,10 +2388,15 @@ Map<String, double> _kLeagueFantasyBaseScoresFromDetail(
       final player = _lineupPlayerFromRaw(rawPlayer, lineup: lineup);
       if (player == null) continue;
       final key = '$club|${player.name}';
-      final minutes = (subOutMinuteByKey[key] ?? totalMinutes).toDouble();
+      final statsKey = '$club|${player.number}';
+      final rawMinutes =
+          statsMinutesByClubAndNumber[statsKey] ??
+          (subOutMinuteByKey[key] ?? totalMinutes);
+      final minutes = max(1, min(90, rawMinutes)).toDouble();
       final playerCleanSheetPoints = cleanSheetPoints > 0
           ? _kLeagueCleanSheetPoints(player.position)
           : 0.0;
+      appearedKeys.add(key);
       addScore(
         key,
         minutes * 0.1 +
@@ -746,14 +2411,23 @@ Map<String, double> _kLeagueFantasyBaseScoresFromDetail(
       if (player == null) continue;
       final key = '$club|${player.name}';
       final enteredAt = subInMinuteByKey[key];
-      if (enteredAt == null) {
-        addScore(key, (ownGoalCounts[key] ?? 0) * -2);
+      final statsKey = '$club|${player.number}';
+      final statsMinutes = statsMinutesByClubAndNumber[statsKey];
+      final statsSubstitute = statsSubstituteByClubAndNumber[statsKey] == true;
+      final hasAppearanceEvidence =
+          enteredAt != null ||
+          (statsMinutes != null && statsMinutes > 0) ||
+          (statsSubstitute && (statsMinutes ?? 0) > 0);
+      if (!hasAppearanceEvidence) {
         continue;
       }
-      final minutes = max(0, totalMinutes - enteredAt).toDouble();
+      final rawMinutes =
+          statsMinutes ?? max(0, totalMinutes - (enteredAt ?? totalMinutes));
+      final minutes = max(1, min(90, rawMinutes)).toDouble();
       final playerCleanSheetPoints = cleanSheetPoints > 0
           ? _kLeagueCleanSheetPoints(player.position)
           : 0.0;
+      appearedKeys.add(key);
       addScore(
         key,
         minutes * 0.1 +
@@ -781,40 +2455,71 @@ Map<String, double> _kLeagueFantasyBaseScoresFromDetail(
       final value = scores[key];
       if (value == null) continue;
       expandedScores[key] = value;
+      if (appearedKeys.contains(key)) {
+        appearedKeys.add(key);
+      }
       if (player.originalName.trim().isNotEmpty) {
         expandedScores['$club|${player.originalName.trim()}'] = value;
+        if (appearedKeys.contains(key)) {
+          appearedKeys.add('$club|${player.originalName.trim()}');
+        }
       }
       final rosterName = _kLeagueRosterNameForClubNumber(club, player.number);
       if (rosterName.isNotEmpty) {
         expandedScores['$club|$rosterName'] = value;
+        if (appearedKeys.contains(key)) {
+          appearedKeys.add('$club|$rosterName');
+        }
       }
     }
   }
 
-  return expandedScores;
+  return _KLeagueDetailPlayerScoreBundle(
+    scores: expandedScores,
+    appearedKeys: appearedKeys,
+  );
+}
+
+String _kLeagueSeasonAptsKey({
+  required String club,
+  required String name,
+  int? preferredNumber,
+}) {
+  final base = '${_canonicalKLeagueClub(club)}|${name.trim()}';
+  if (preferredNumber != null && preferredNumber > 0) {
+    return '$base|$preferredNumber';
+  }
+  return base;
 }
 
 Future<_FantasySoccerRoundScoreSnapshot>
-_computeFantasySoccerRoundScoreSnapshot(_JoinedDraft draft, int round) async {
-  final roundStart = draft.when.toUtc().add(Duration(days: 7 * (round - 1)));
-  final roundEnd = roundStart.add(const Duration(days: 7));
-  final nowUtc = DateTime.now().toUtc();
-  final leagueData = await ApiService.fetchLeagueData();
+_computeFantasySoccerRoundScoreSnapshot(
+  _JoinedDraft draft,
+  int round, {
+  bool forceRefreshLiveData = false,
+}) async {
+  await _loadApiSoccerPlayers();
+  final leagueData = await _loadCachedKLeagueLeagueData(
+    forceRefresh: forceRefreshLiveData,
+  );
   final rawFixtures = _fixtureAsList(leagueData['fixtures']);
+  final mappedKLeagueRound = _mappedKLeagueRoundForFantasyRound(
+    draft,
+    round,
+    rawFixtures,
+  );
   final relevantFixtures = <Map<String, dynamic>>[];
 
   for (final raw in rawFixtures) {
     final map = _fixtureAsMap(raw);
-    final fixture = _fixtureAsMap(map['fixture']);
-    final kickoff = DateTime.tryParse(_fixtureText(fixture['date']))?.toUtc();
-    if (kickoff == null) continue;
-    if (kickoff.isBefore(roundStart) || !kickoff.isBefore(roundEnd)) continue;
+    final league = _fixtureAsMap(map['league']);
+    final fixtureRound = _roundNumber(_fixtureText(league['round']));
+    if (fixtureRound != mappedKLeagueRound) continue;
     relevantFixtures.add(map);
   }
 
-  var allFinal = relevantFixtures.isNotEmpty || nowUtc.isAfter(roundEnd);
+  var allFinal = relevantFixtures.isNotEmpty;
   final baseByClubAndPlayer = <String, double>{};
-
   for (final rawFixture in relevantFixtures) {
     final fixture = _fixtureAsMap(rawFixture['fixture']);
     final fixtureId = _readNullableInt(fixture['id']);
@@ -822,22 +2527,33 @@ _computeFantasySoccerRoundScoreSnapshot(_JoinedDraft draft, int round) async {
       allFinal = false;
       continue;
     }
-
-    final detail = await ApiService.fetchFixtureDetails(fixtureId);
-    final detailFixture = _fixtureAsMap(detail['fixture']);
-    final fixtureMeta = _fixtureAsMap(detailFixture['fixture']);
-    final status = _fixtureAsMap(fixtureMeta['status']);
-    final statusShort = _fixtureText(status['short']);
-    final isFinal = _isKLeagueFinalStatus(statusShort);
-    if (!isFinal) allFinal = false;
-    final fixtureScores = _kLeagueFantasyBaseScoresFromDetail(detail);
-    fixtureScores.forEach(
-      (key, score) => baseByClubAndPlayer.update(
-        key,
-        (value) => value + score,
-        ifAbsent: () => score,
-      ),
-    );
+    try {
+      final detail = await _loadCachedKLeagueFixtureDetail(
+        fixtureId,
+        forceRefresh: forceRefreshLiveData,
+      );
+      final detailFixture = _fixtureAsMap(detail['fixture']);
+      final fixtureMeta = _fixtureAsMap(detailFixture['fixture']);
+      final status = _fixtureAsMap(fixtureMeta['status']);
+      if (!_isKLeagueFinalStatus(_fixtureText(status['short']))) {
+        allFinal = false;
+      }
+      final scores = _kLeagueFantasyBaseScoresFromDetail(detail);
+      scores.forEach(
+        (key, score) => baseByClubAndPlayer.update(
+          key,
+          (value) => value + score,
+          ifAbsent: () => score,
+        ),
+      );
+    } catch (error, stackTrace) {
+      debugPrint(
+        'Fantasy soccer round score detail load failed '
+        '(round=$mappedKLeagueRound, fixture=$fixtureId): $error',
+      );
+      debugPrint('$stackTrace');
+      allFinal = false;
+    }
   }
 
   final basePlayerScores = <String, double>{};
@@ -845,6 +2561,8 @@ _computeFantasySoccerRoundScoreSnapshot(_JoinedDraft draft, int round) async {
   final teamScores = <String, double>{};
   final captainNames = <String, String?>{};
   final viceCaptainNames = <String, String?>{};
+  final captainPlayerIds = <String, String?>{};
+  final viceCaptainPlayerIds = <String, String?>{};
 
   for (final team in draft.fantasyTeams) {
     final teamKey = _fantasyTeamIdentity(
@@ -852,9 +2570,24 @@ _computeFantasySoccerRoundScoreSnapshot(_JoinedDraft draft, int round) async {
       teamName: team.teamName,
     );
     double baseScoreFor(_FantasyTeamPlayer player) {
+      final clubKey = _canonicalKLeagueClub(player.club);
+      if (clubKey.isNotEmpty) {
+        final direct = baseByClubAndPlayer['$clubKey|${player.name}'];
+        if (direct != null) return direct;
+        if (player.number > 0) {
+          final rosterName = _kLeagueRosterNameForClubNumber(
+            clubKey,
+            '${player.number}',
+          );
+          if (rosterName.isNotEmpty) {
+            final rosterScore = baseByClubAndPlayer['$clubKey|$rosterName'];
+            if (rosterScore != null) return rosterScore;
+          }
+        }
+      }
       final meta = _resolvePlayerMeta(player.name);
-      final clubKey = _canonicalKLeagueClub(meta.club);
-      return baseByClubAndPlayer['$clubKey|${player.name}'] ?? 0;
+      return baseByClubAndPlayer['${_canonicalKLeagueClub(meta.club)}|${player.name}'] ??
+          0;
     }
 
     final rankedStarters = [...team.starting]
@@ -863,20 +2596,61 @@ _computeFantasySoccerRoundScoreSnapshot(_JoinedDraft draft, int round) async {
         if (scoreCompare != 0) return scoreCompare;
         return a.name.compareTo(b.name);
       });
-    final captain = rankedStarters.isEmpty ? null : rankedStarters.first.name;
-    final viceCaptain = rankedStarters.length < 2
+    final startersById = <String, _FantasyTeamPlayer>{
+      for (final player in team.starting)
+        _fantasyTeamPlayerIdentity(player): player,
+    };
+    final captainPlayer =
+        team.captainPlayerId != null &&
+            startersById.containsKey(team.captainPlayerId)
+        ? startersById[team.captainPlayerId]
+        : (team.captainName == null
+                  ? null
+                  : team.starting.cast<_FantasyTeamPlayer?>().firstWhere(
+                      (player) => player?.name == team.captainName,
+                      orElse: () => null,
+                    )) ??
+              (rankedStarters.isEmpty ? null : rankedStarters.first);
+    final captainId = captainPlayer == null
         ? null
-        : rankedStarters[1].name;
+        : _fantasyTeamPlayerIdentity(captainPlayer);
+    final captain = captainPlayer?.name;
+    final viceCaptainPlayer =
+        team.viceCaptainPlayerId != null &&
+            team.viceCaptainPlayerId != captainId &&
+            startersById.containsKey(team.viceCaptainPlayerId)
+        ? startersById[team.viceCaptainPlayerId]
+        : (team.viceCaptainName == null
+                  ? null
+                  : team.starting.cast<_FantasyTeamPlayer?>().firstWhere(
+                      (player) =>
+                          player?.name == team.viceCaptainName &&
+                          _fantasyTeamPlayerIdentity(player!) != captainId,
+                      orElse: () => null,
+                    )) ??
+              rankedStarters.cast<_FantasyTeamPlayer?>().firstWhere(
+                (player) =>
+                    player != null &&
+                    _fantasyTeamPlayerIdentity(player) != captainId,
+                orElse: () => null,
+              );
     captainNames[teamKey] = captain;
-    viceCaptainNames[teamKey] = viceCaptain;
+    viceCaptainNames[teamKey] = viceCaptainPlayer?.name;
+    captainPlayerIds[teamKey] = captainId;
+    viceCaptainPlayerIds[teamKey] = viceCaptainPlayer == null
+        ? null
+        : _fantasyTeamPlayerIdentity(viceCaptainPlayer);
 
     for (final player in team.roster) {
       final base = baseScoreFor(player);
-      final displayed = player.name == captain ? base * 2 : base;
+      final displayed = _fantasyTeamPlayerIdentity(player) == captainId
+          ? base * 2
+          : base;
       final playerKey = _fantasySoccerPlayerCacheKey(
         teamUid: team.uid,
         teamName: team.teamName,
         playerName: player.name,
+        playerId: player.playerId,
       );
       basePlayerScores[playerKey] = base;
       displayedPlayerScores[playerKey] = displayed;
@@ -890,8 +2664,20 @@ _computeFantasySoccerRoundScoreSnapshot(_JoinedDraft draft, int round) async {
                 teamUid: team.uid,
                 teamName: team.teamName,
                 playerName: player.name,
+                playerId: player.playerId,
               )] ??
               0),
+    );
+  }
+
+  if (relevantFixtures.isEmpty ||
+      (teamScores.isNotEmpty &&
+          teamScores.values.every((score) => score == 0))) {
+    debugPrint(
+      'fantasy soccer snapshot: league=${draft.leagueName} '
+      'draftWhen=${draft.when.toIso8601String()} fantasyRound=$round '
+      'mappedKLeagueRound=$mappedKLeagueRound fixtures=${relevantFixtures.length} '
+      'baseScores=${baseByClubAndPlayer.length} teamScores=${teamScores.length}',
     );
   }
 
@@ -905,6 +2691,8 @@ _computeFantasySoccerRoundScoreSnapshot(_JoinedDraft draft, int round) async {
     teamScores: teamScores,
     captainNames: captainNames,
     viceCaptainNames: viceCaptainNames,
+    captainPlayerIds: captainPlayerIds,
+    viceCaptainPlayerIds: viceCaptainPlayerIds,
   );
 }
 
@@ -912,6 +2700,7 @@ Future<_FantasySoccerRoundScoreSnapshot> _ensureFantasySoccerRoundScoreSnapshot(
   _JoinedDraft draft,
   int round, {
   bool force = false,
+  bool forceRefreshLiveData = false,
 }) {
   final cacheKey = _fantasySoccerRoundCacheKey(draft, round);
   final cached = _fantasySoccerRoundScoreCache[cacheKey];
@@ -926,14 +2715,19 @@ Future<_FantasySoccerRoundScoreSnapshot> _ensureFantasySoccerRoundScoreSnapshot(
   final inFlight = _fantasySoccerRoundScoreInFlight[cacheKey];
   if (inFlight != null) return inFlight;
 
-  final future = _computeFantasySoccerRoundScoreSnapshot(draft, round)
-      .then((snapshot) {
-        _fantasySoccerRoundScoreCache[cacheKey] = snapshot;
-        return snapshot;
-      })
-      .whenComplete(() {
-        _fantasySoccerRoundScoreInFlight.remove(cacheKey);
-      });
+  final future =
+      _computeFantasySoccerRoundScoreSnapshot(
+            draft,
+            round,
+            forceRefreshLiveData: forceRefreshLiveData,
+          )
+          .then((snapshot) {
+            _fantasySoccerRoundScoreCache[cacheKey] = snapshot;
+            return snapshot;
+          })
+          .whenComplete(() {
+            _fantasySoccerRoundScoreInFlight.remove(cacheKey);
+          });
 
   _fantasySoccerRoundScoreInFlight[cacheKey] = future;
   return future;
@@ -953,14 +2747,16 @@ double _fantasySoccerBasePlayerRoundScore(
   _JoinedDraft draft,
   _FantasyTeamState team,
   String playerName,
-  int round,
-) {
+  int round, {
+  String playerId = '',
+}) {
   final snapshot = _fantasySoccerRoundScoreSnapshotFor(draft, round);
   if (snapshot == null) return 0;
   return snapshot.basePlayerScores[_fantasySoccerPlayerCacheKey(
         teamUid: team.uid,
         teamName: team.teamName,
         playerName: playerName,
+        playerId: playerId,
       )] ??
       0;
 }
@@ -969,14 +2765,16 @@ double _fantasySoccerDisplayedPlayerRoundScore(
   _JoinedDraft draft,
   _FantasyTeamState team,
   String playerName,
-  int round,
-) {
+  int round, {
+  String playerId = '',
+}) {
   final snapshot = _fantasySoccerRoundScoreSnapshotFor(draft, round);
   if (snapshot == null) return 0;
   return snapshot.displayedPlayerScores[_fantasySoccerPlayerCacheKey(
         teamUid: team.uid,
         teamName: team.teamName,
         playerName: playerName,
+        playerId: playerId,
       )] ??
       0;
 }
@@ -1007,6 +2805,66 @@ String? _fantasySoccerViceCaptainName(
   )];
 }
 
+_KboFantasyRoundScoreState? _kboRoundScoreStateForTeam(
+  _FantasyTeamState team,
+  int round,
+) {
+  for (final state in team.kboRoundScoreStates) {
+    if (state.round == round) return state;
+  }
+  return null;
+}
+
+bool _isCaptainFantasyPlayerForTeam(
+  _FantasyTeamState? team,
+  _FantasyTeamPlayer player,
+) {
+  if (team == null) return false;
+  final playerId = _fantasyTeamPlayerIdentity(player);
+  if (team.captainPlayerId?.trim().isNotEmpty == true) {
+    return team.captainPlayerId == playerId;
+  }
+  return team.captainName == player.name;
+}
+
+double _fantasyKboBasePlayerRoundScore(
+  _FantasyTeamPlayer player, {
+  required _JoinedDraft draft,
+  required int round,
+}) {
+  if (!_kboFantasyRoundHasStarted(draft, round, DateTime.now())) {
+    return 0.0;
+  }
+  final absoluteRound = _mappedKboRoundForFantasyRound(draft, round);
+  final roundPoints = _cachedKboRoundPointsForPlayer(
+    playerName: player.name,
+    club: _normalizeKboDraftClub(player.club),
+    preferredNumber: player.number,
+    preferredPosition: player.position,
+  );
+  if (roundPoints == null) return 0.0;
+  for (final entry in roundPoints) {
+    if (entry.round == absoluteRound) {
+      return entry.displayedPoints;
+    }
+  }
+  return 0.0;
+}
+
+double _fantasyKboDisplayedPlayerRoundScore(
+  _FantasyTeamPlayer player, {
+  required _JoinedDraft draft,
+  required int round,
+  _FantasyTeamState? team,
+}) {
+  final base = _fantasyKboBasePlayerRoundScore(
+    player,
+    draft: draft,
+    round: round,
+  );
+  return _isCaptainFantasyPlayerForTeam(team, player) ? base * 2 : base;
+}
+
 double _fantasyPlayerRoundScore(
   _FantasyTeamPlayer player,
   int round, {
@@ -1021,14 +2879,16 @@ double _fantasyPlayerRoundScore(
       team,
       player.name,
       round,
+      playerId: player.playerId,
     );
   }
-  final seed = _stableSeedFromKey(
-    '${player.name}|${player.position}|$round|${isSoccer ? 'soccer' : 'baseball'}',
+  if (draft == null) return 0.0;
+  return _fantasyKboDisplayedPlayerRoundScore(
+    player,
+    draft: draft,
+    round: round,
+    team: team,
   );
-  final variance = ((seed % 17) - 8) / 2.0;
-  final base = player.score.toDouble();
-  return max(0, base * 1.4 + variance * 1.3);
 }
 
 double _fantasyTeamRoundScore(
@@ -1047,18 +2907,30 @@ double _fantasyTeamRoundScore(
         )] ??
         0;
   }
-  return team.starting.fold<double>(
-    0,
-    (total, player) =>
-        total +
-        _fantasyPlayerRoundScore(
-          player,
-          round,
-          isSoccer: isSoccer,
-          draft: draft,
-          team: team,
-        ),
+  if (draft == null ||
+      !_kboFantasyRoundHasStarted(draft, round, DateTime.now())) {
+    return 0.0;
+  }
+  final unlockedSnapshot = _kboUnlockedRoundScoreSnapshotForTeam(
+    team,
+    draft: draft,
+    round: round,
   );
+  if (unlockedSnapshot != null) return unlockedSnapshot;
+  final state = _kboRoundScoreStateForTeam(team, round);
+  final baselines = state?.starterBaselines ?? const <String, double>{};
+  final bankedScore = state?.bankedScore ?? 0.0;
+  return bankedScore +
+      team.starting.fold<double>(0.0, (total, player) {
+        final current = _fantasyKboDisplayedPlayerRoundScore(
+          player,
+          draft: draft,
+          round: round,
+          team: team,
+        );
+        final baseline = baselines[_fantasyTeamPlayerIdentity(player)] ?? 0.0;
+        return total + (current - baseline);
+      });
 }
 
 String? _currentUserFantasyTeamName(_JoinedDraft draft) {
@@ -1066,17 +2938,19 @@ String? _currentUserFantasyTeamName(_JoinedDraft draft) {
   if (user == null) return null;
 
   for (final team in draft.fantasyTeams) {
-    if (team.uid == user.uid) return team.teamName;
+    if (team.uid == user.uid) {
+      return _normalizedFantasyDisplayNameForUid(user.uid, team.teamName);
+    }
   }
 
   for (final entry in draft.draftOrder) {
-    if (entry.uid == user.uid) return entry.displayName;
+    if (entry.uid == user.uid) {
+      return _normalizedFantasyDisplayNameForUid(user.uid, entry.displayName);
+    }
   }
 
-  final displayName = user.displayName?.trim();
-  if (displayName != null && displayName.isNotEmpty) return displayName;
-  final emailPrefix = (user.email ?? '').split('@').first.trim();
-  if (emailPrefix.isNotEmpty) return emailPrefix;
+  final preferred = _currentSignedInFantasyDisplayName();
+  if (preferred.isNotEmpty) return preferred;
   return null;
 }
 
@@ -1104,13 +2978,16 @@ _FantasyMatchupView? _currentFantasyMatchupForDraft(_JoinedDraft draft) {
   }
 
   final round = _currentFantasyRoundAt(draft, DateTime.now());
-  final matchup = draft.fantasySchedule.firstWhere(
+  final roundMatchups = draft.fantasySchedule
+      .where((item) => item.round == round)
+      .toList(growable: false);
+  final matchup = roundMatchups.firstWhere(
     (item) =>
-        item.round == round &&
         (((myUid != null && myUid.isNotEmpty) &&
-                (item.homeUid == myUid || item.awayUid == myUid)) ||
-            ((myTeamName != null && myTeamName.isNotEmpty) &&
-                (item.homeTeam == myTeamName || item.awayTeam == myTeamName))),
+            (item.homeUid == myUid || item.awayUid == myUid)) ||
+        ((myTeamName != null && myTeamName.isNotEmpty) &&
+            (_sameFantasyIdentity(item.homeTeam, myTeamName) ||
+                _sameFantasyIdentity(item.awayTeam, myTeamName)))),
     orElse: () => const _FantasyScheduleMatchup(
       round: -1,
       homeUid: '',
@@ -1119,19 +2996,51 @@ _FantasyMatchupView? _currentFantasyMatchupForDraft(_JoinedDraft draft) {
       awayTeam: '',
     ),
   );
-  if (matchup.round < 0) {
-    debugPrint(
-      'currentFantasyMatchupForDraft: no matchup found '
-      '(round=$round, uid=$myUid, team=$myTeamName) for ${draft.leagueName}',
-    );
-    return null;
-  }
-
   _FantasyTeamState? findTeam({String? uid, String? name}) {
     for (final team in draft.fantasyTeams) {
       if (uid != null && uid.isNotEmpty && team.uid == uid) return team;
-      if (name != null && name.isNotEmpty && team.teamName == name) return team;
+      if (name != null &&
+          name.isNotEmpty &&
+          _sameFantasyIdentity(team.teamName, name)) {
+        return team;
+      }
     }
+    return null;
+  }
+
+  if (matchup.round < 0) {
+    final myTeam = findTeam(uid: myUid, name: myTeamName);
+    if (myTeam != null && roundMatchups.isNotEmpty) {
+      final scoresReady =
+          !draft.isSoccer ||
+          _fantasySoccerRoundScoreSnapshotFor(draft, round) != null;
+      return _FantasyMatchupView(
+        draft: draft,
+        round: round,
+        matchup: _FantasyScheduleMatchup(
+          round: round,
+          homeUid: myTeam.uid,
+          homeTeam: myTeam.teamName,
+          awayUid: '__bye__',
+          awayTeam: 'BYE',
+        ),
+        myTeam: myTeam,
+        opponent: const _FantasyTeamState(uid: '__bye__', teamName: 'BYE'),
+        scoresReady: scoresReady,
+        myScore: _fantasyTeamRoundScore(
+          myTeam,
+          round,
+          isSoccer: draft.isSoccer,
+          draft: draft,
+        ),
+        opponentScore: 0,
+      );
+    }
+    debugPrint(
+      'currentFantasyMatchupForDraft: no matchup found '
+      '(round=$round, uid=$myUid, team=$myTeamName, roundMatchups=${roundMatchups.length}) '
+      'for ${draft.leagueName}',
+    );
     return null;
   }
 
@@ -1151,9 +3060,12 @@ _FantasyMatchupView? _currentFantasyMatchupForDraft(_JoinedDraft draft) {
       (myUid != null && myUid.isNotEmpty && matchup.homeUid == myUid) ||
       (myTeamName != null &&
           myTeamName.isNotEmpty &&
-          matchup.homeTeam == myTeamName);
+          _sameFantasyIdentity(matchup.homeTeam, myTeamName));
   final myTeam = isHome ? homeTeam : awayTeam;
   final opponent = isHome ? awayTeam : homeTeam;
+  final scoresReady =
+      !draft.isSoccer ||
+      _fantasySoccerRoundScoreSnapshotFor(draft, round) != null;
 
   return _FantasyMatchupView(
     draft: draft,
@@ -1161,6 +3073,7 @@ _FantasyMatchupView? _currentFantasyMatchupForDraft(_JoinedDraft draft) {
     matchup: matchup,
     myTeam: myTeam,
     opponent: opponent,
+    scoresReady: scoresReady,
     myScore: _fantasyTeamRoundScore(
       myTeam,
       round,
@@ -1176,31 +3089,146 @@ _FantasyMatchupView? _currentFantasyMatchupForDraft(_JoinedDraft draft) {
   );
 }
 
-List<_FantasyTeamPlayer> _parseFantasyTeamPlayers(dynamic raw) {
+List<_FantasyTeamPlayer> _parseFantasyTeamPlayers(
+  dynamic raw, {
+  required bool isSoccer,
+}) {
   final list = raw as List<dynamic>? ?? const [];
   return list.whereType<Map>().map((item) {
     final map = Map<String, dynamic>.from(item);
+    final name = '${map['name'] ?? ''}';
+    final club = '${map['club'] ?? ''}'.trim();
+    final number = map['number'] is int
+        ? map['number'] as int
+        : int.tryParse('${map['number'] ?? 0}') ?? 0;
+    final fallbackMeta = isSoccer ? _resolvePlayerMeta(name) : null;
+    final resolvedClub = club.isNotEmpty ? club : (fallbackMeta?.club ?? '');
+    final resolvedNumber = number > 0 ? number : (fallbackMeta?.number ?? 0);
     return _FantasyTeamPlayer(
-      name: '${map['name'] ?? ''}',
+      name: name,
       position: '${map['position'] ?? ''}',
       score: map['score'] is int
           ? map['score'] as int
           : int.tryParse('${map['score'] ?? 0}') ?? 0,
+      club: resolvedClub,
+      number: resolvedNumber,
+      playerId: _fantasyPlayerIdentity(
+        name: name,
+        club: resolvedClub,
+        number: resolvedNumber,
+        playerId: '${map['playerId'] ?? ''}',
+      ),
     );
   }).toList();
 }
 
-List<_FantasyTeamState> _parseFantasyTeams(dynamic raw) {
+List<_KboFantasyRoundScoreState> _parseKboRoundScoreStates(dynamic raw) {
+  final list = raw as List<dynamic>? ?? const [];
+  final parsed =
+      list
+          .whereType<Map>()
+          .map((item) {
+            final map = Map<String, dynamic>.from(
+              item.cast<Object?, Object?>(),
+            );
+            final round = map['round'] is int
+                ? map['round'] as int
+                : int.tryParse('${map['round'] ?? 0}') ?? 0;
+            if (round <= 0) return null;
+            final rawBaselines = map['starterBaselines'] is Map
+                ? map['starterBaselines'] as Map
+                : null;
+            final starterBaselines = <String, double>{};
+            if (rawBaselines != null) {
+              for (final entry in rawBaselines.entries) {
+                final key = '${entry.key}'.trim();
+                if (key.isEmpty) continue;
+                starterBaselines[key] =
+                    (entry.value as num?)?.toDouble() ??
+                    double.tryParse('${entry.value}') ??
+                    0.0;
+              }
+            }
+            final updatedAt =
+                DateTime.tryParse('${map['updatedAt'] ?? ''}') ??
+                DateTime(1970);
+            return _KboFantasyRoundScoreState(
+              round: round,
+              bankedScore:
+                  (map['bankedScore'] as num?)?.toDouble() ??
+                  double.tryParse('${map['bankedScore'] ?? ''}') ??
+                  0.0,
+              starterBaselines: starterBaselines,
+              updatedAt: updatedAt,
+              unlockedScoreSnapshot:
+                  (map['unlockedScoreSnapshot'] as num?)?.toDouble() ??
+                  double.tryParse('${map['unlockedScoreSnapshot'] ?? ''}'),
+              unlockedAt: DateTime.tryParse('${map['unlockedAt'] ?? ''}'),
+            );
+          })
+          .whereType<_KboFantasyRoundScoreState>()
+          .toList()
+        ..sort((a, b) => a.round.compareTo(b.round));
+  return parsed;
+}
+
+bool _shouldFreezeUnlockedKboRoundScore(
+  _JoinedDraft draft,
+  int round, {
+  DateTime? now,
+}) {
+  if (draft.isSoccer || round <= 0) return false;
+  final currentTime = now ?? DateTime.now();
+  if (!_kboFantasyRoundHasStarted(draft, round, currentTime)) return false;
+  final lockState = _fantasyRosterLockStateForDraft(draft, now: currentTime);
+  return lockState.phase == _FantasyRosterLockPhase.unlocked &&
+      lockState.fantasyRound == round;
+}
+
+double? _kboUnlockedRoundScoreSnapshotForTeam(
+  _FantasyTeamState team, {
+  required _JoinedDraft draft,
+  required int round,
+  DateTime? now,
+}) {
+  if (!_shouldFreezeUnlockedKboRoundScore(draft, round, now: now)) {
+    return null;
+  }
+  return _kboRoundScoreStateForTeam(team, round)?.unlockedScoreSnapshot;
+}
+
+List<_FantasyTeamState> _parseFantasyTeams(
+  dynamic raw, {
+  required bool isSoccer,
+}) {
   final list = raw as List<dynamic>? ?? const [];
   return list.whereType<Map>().map((item) {
     final map = Map<String, dynamic>.from(item);
-    return _FantasyTeamState(
-      uid: '${map['uid'] ?? ''}',
-      teamName: '${map['teamName'] ?? 'Team'}',
-      roster: _parseFantasyTeamPlayers(map['roster']),
-      starting: _parseFantasyTeamPlayers(map['starting']),
-      bench: _parseFantasyTeamPlayers(map['bench']),
+    final uid = '${map['uid'] ?? ''}';
+    final captainName = '${map['captainName'] ?? ''}'.trim();
+    final viceCaptainName = '${map['viceCaptainName'] ?? ''}'.trim();
+    final captainPlayerId = '${map['captainPlayerId'] ?? ''}'.trim();
+    final viceCaptainPlayerId = '${map['viceCaptainPlayerId'] ?? ''}'.trim();
+    final team = _FantasyTeamState(
+      uid: uid,
+      teamName: _normalizedFantasyDisplayNameForUid(
+        uid,
+        '${map['teamName'] ?? 'Team'}',
+      ),
+      roster: _parseFantasyTeamPlayers(map['roster'], isSoccer: isSoccer),
+      starting: _parseFantasyTeamPlayers(map['starting'], isSoccer: isSoccer),
+      bench: _parseFantasyTeamPlayers(map['bench'], isSoccer: isSoccer),
+      captainName: captainName.isEmpty ? null : captainName,
+      viceCaptainName: viceCaptainName.isEmpty ? null : viceCaptainName,
+      captainPlayerId: captainPlayerId.isEmpty ? null : captainPlayerId,
+      viceCaptainPlayerId: viceCaptainPlayerId.isEmpty
+          ? null
+          : viceCaptainPlayerId,
+      kboRoundScoreStates: _parseKboRoundScoreStates(
+        map['kboRoundScoreStates'],
+      ),
     );
+    return isSoccer ? team : _normalizeBaseballFantasyTeam(team);
   }).toList();
 }
 
@@ -1208,14 +3236,22 @@ List<_FantasyScheduleMatchup> _parseFantasySchedule(dynamic raw) {
   final list = raw as List<dynamic>? ?? const [];
   return list.whereType<Map>().map((item) {
     final map = Map<String, dynamic>.from(item);
+    final homeUid = '${map['homeUid'] ?? ''}';
+    final awayUid = '${map['awayUid'] ?? ''}';
     return _FantasyScheduleMatchup(
       round: map['round'] is int
           ? map['round'] as int
           : int.tryParse('${map['round'] ?? 0}') ?? 0,
-      homeUid: '${map['homeUid'] ?? ''}',
-      homeTeam: '${map['homeTeam'] ?? ''}',
-      awayUid: '${map['awayUid'] ?? ''}',
-      awayTeam: '${map['awayTeam'] ?? ''}',
+      homeUid: homeUid,
+      homeTeam: _normalizedFantasyDisplayNameForUid(
+        homeUid,
+        '${map['homeTeam'] ?? ''}',
+      ),
+      awayUid: awayUid,
+      awayTeam: _normalizedFantasyDisplayNameForUid(
+        awayUid,
+        '${map['awayTeam'] ?? ''}',
+      ),
     );
   }).toList()..sort((a, b) {
     final roundCompare = a.round.compareTo(b.round);
@@ -1224,7 +3260,10 @@ List<_FantasyScheduleMatchup> _parseFantasySchedule(dynamic raw) {
   });
 }
 
-List<List<_PlayerSlot?>> _parseDraftBoard(dynamic raw) {
+List<List<_PlayerSlot?>> _parseDraftBoard(
+  dynamic raw, {
+  required bool isSoccer,
+}) {
   final rows = raw as List<dynamic>? ?? const [];
   return rows.map<List<_PlayerSlot?>>((row) {
     final dynamic rawCells;
@@ -1239,12 +3278,27 @@ List<List<_PlayerSlot?>> _parseDraftBoard(dynamic raw) {
       final map = Map<String, dynamic>.from(cell);
       final name = '${map['name'] ?? ''}';
       if (name.isEmpty) return null;
+      final club = '${map['club'] ?? ''}'.trim();
+      final number = map['number'] is int
+          ? map['number'] as int
+          : int.tryParse('${map['number'] ?? 0}') ?? 0;
+      final fallbackMeta = isSoccer ? _resolvePlayerMeta(name) : null;
+      final resolvedClub = club.isNotEmpty ? club : (fallbackMeta?.club ?? '');
+      final resolvedNumber = number > 0 ? number : (fallbackMeta?.number ?? 0);
       return _PlayerSlot(
         name: name,
         position: '${map['position'] ?? ''}',
         score: map['score'] is int
             ? map['score'] as int
             : int.tryParse('${map['score'] ?? 0}') ?? 0,
+        club: resolvedClub,
+        number: resolvedNumber,
+        playerId: _fantasyPlayerIdentity(
+          name: name,
+          club: resolvedClub,
+          number: resolvedNumber,
+          playerId: '${map['playerId'] ?? ''}',
+        ),
       );
     }).toList();
   }).toList();
@@ -1264,6 +3318,9 @@ List<Map<String, dynamic>> _draftBoardToFirestoreRows(
                     'name': slot.name,
                     'position': slot.position,
                     'score': slot.score,
+                    'club': slot.club,
+                    'number': slot.number,
+                    'playerId': slot.playerId,
                   },
           )
           .toList(),
@@ -1331,9 +3388,13 @@ String? _normalizeKboDraftPosition(String value) {
     case 'Catcher':
       return 'C';
     case 'Outfielder':
+    case 'Left Fielder':
+    case 'Right Fielder':
     case 'Center Fielder':
       return 'OF';
     case 'Infielder':
+    case 'First baseman':
+    case 'Shortstop':
     case 'Second baseman':
     case 'Third baseman':
       return 'IF';
@@ -1380,7 +3441,7 @@ List<_PlayerSlot> _parseKboDraftPlayerPool(String raw) {
     final koreanName = parts[1];
     final club = _normalizeKboDraftClub(parts[2]);
     final position = _normalizeKboDraftPosition(parts[3]);
-    final number = parts[4];
+    final number = int.tryParse(parts[4]) ?? 0;
     if (englishName.isEmpty || koreanName.isEmpty || position == null) {
       continue;
     }
@@ -1395,6 +3456,9 @@ List<_PlayerSlot> _parseKboDraftPlayerPool(String raw) {
         name: displayName,
         score: 5 + (scoreSeed % 6),
         position: position,
+        club: club,
+        number: number,
+        playerId: dedupeKey,
       ),
     );
   }
@@ -1438,6 +3502,9 @@ _PlayerSlot _makeRecoveredBaseballSlot({
     name: '$club $position$number',
     score: 5 + (scoreSeed % 6),
     position: position,
+    club: club,
+    number: number,
+    playerId: '$club|$position|$number',
   );
 }
 
@@ -1491,20 +3558,12 @@ List<_FantasyTeamPlayer> _buildRecoveredSoccerStarting(
 List<_FantasyTeamPlayer> _buildRecoveredBaseballStarting(
   List<_FantasyTeamPlayer> roster,
 ) {
-  final catchers = roster.where((p) => p.position == 'C').toList()
-    ..sort((a, b) => b.score.compareTo(a.score));
-  final pitchers = roster.where((p) => p.position == 'P').toList()
-    ..sort((a, b) => b.score.compareTo(a.score));
-  final infielders = roster.where((p) => p.position == 'IF').toList()
-    ..sort((a, b) => b.score.compareTo(a.score));
-  final outfielders = roster.where((p) => p.position == 'OF').toList()
-    ..sort((a, b) => b.score.compareTo(a.score));
-  return [
-    ...catchers.take(1),
-    ...pitchers.take(1),
-    ...infielders.take(4),
-    ...outfielders.take(3),
-  ];
+  return _buildBaseballStartingFromRoster(
+    roster,
+    positionOf: (player) => player.position,
+    scoreOf: (player) => player.score,
+    identityOf: (player) => _fantasyTeamPlayerIdentity(player),
+  );
 }
 
 Future<_RecoveredFantasyPayload> _recoverFantasyPayloadFromDraft(
@@ -1639,15 +3698,20 @@ Future<_RecoveredFantasyPayload> _recoverFantasyPayloadFromDraft(
           name: slot.name,
           position: slot.position,
           score: slot.score,
+          club: slot.club,
+          number: slot.number,
+          playerId: slot.playerId,
         ),
       );
     }
     final starting = draft.isSoccer
         ? _buildRecoveredSoccerStarting(roster)
         : _buildRecoveredBaseballStarting(roster);
-    final startingNames = starting.map((player) => player.name).toSet();
+    final startingIds = starting.map(_fantasyTeamPlayerIdentity).toSet();
     final bench = roster
-        .where((player) => !startingNames.contains(player.name))
+        .where(
+          (player) => !startingIds.contains(_fantasyTeamPlayerIdentity(player)),
+        )
         .toList();
     final entry = draftOrderEntries[teamIdx];
     teams.add(
@@ -1768,7 +3832,7 @@ class LeagueItHomePage extends StatefulWidget {
 }
 
 class LeagueItHomePageState extends State<LeagueItHomePage>
-    with TickerProviderStateMixin {
+    with TickerProviderStateMixin, RouteAware {
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
   late AnimationController _launchController;
@@ -1785,18 +3849,31 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
   bool _isMenuOpen = false;
   bool _isMyPageOpen = false;
   bool _isLoggedIn = false;
+  String _lastAvatarCacheAuthUid = '';
   bool _hasSoccerLeague = false;
   bool _hasBaseballLeague = false;
   bool _frontLeagueIsSoccer = true;
-  List<String> _suggestions = [];
+  String? _selectedHomeSoccerLeagueId;
+  String? _selectedHomeBaseballLeagueId;
+  bool _suggestionsVisible = false;
+  List<_HomeSearchSuggestion> _suggestions = [];
   DateTime? _draftTime;
   String? _draftLeagueName;
   Timer? _draftTimer;
   Timer? _kboLiveRefreshTimer;
+  Future<void>? _visibleHomeKboRefreshFuture;
+  DateTime? _lastVisibleHomeKboRefreshAt;
+  bool _backgroundLiveRefreshSuspended = false;
   Duration _draftRemaining = Duration.zero;
   List<_JoinedDraft> _joinedDrafts = const [];
   final Set<String> _recoveringFantasyLeagueIds = <String>{};
+  final Set<String> _cancelingUnfilledLeagueIds = <String>{};
   bool _isRefreshingFantasySoccerScores = false;
+  AppLinks? _appLinks;
+  StreamSubscription<Uri>? _incomingLeagueLinkSub;
+  String? _pendingInviteCodeFromLink;
+  String? _lastHandledLeagueLink;
+  bool _isHandlingInviteCodeFromLink = false;
   StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _joinedDraftsSub;
   final FlutterSecureStorage _localStateStorage = const FlutterSecureStorage(
     iOptions: IOSOptions(accountName: 'leagueit_local_state'),
@@ -1805,7 +3882,18 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
   static const String _kHasBaseballLeagueKey = 'home.has_baseball_league';
   static const String _kDraftTimeKey = 'home.draft_time';
   static const String _kDraftNameKey = 'home.draft_name';
+
+  void setBackgroundLiveRefreshSuspended(bool suspended) {
+    _backgroundLiveRefreshSuspended = suspended;
+  }
+
   static const String _kFrontLeagueKey = 'home.front_is_soccer';
+  static const String _kSelectedHomeSoccerLeagueKey =
+      'home.selected_soccer_league';
+  static const String _kSelectedHomeBaseballLeagueKey =
+      'home.selected_baseball_league';
+  static const String _kJoinedDraftsKey = 'home.joined_drafts.v1';
+  final GlobalKey _homeTitleKey = GlobalKey();
   // Keep false in normal app flow. When true, login/league state is randomized
   // for UI demos and can look like "mock login".
   static const bool _demoRandomState = false;
@@ -1815,7 +3903,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     'Fantasy 12',
     'Sunday League',
   ];
-  late final List<String> _playerDirectory;
+  List<_HomeSearchSuggestion> _playerDirectory = const [];
 
   bool get isLoggedIn => _isLoggedIn;
   bool get hasSoccerLeague => _hasSoccerLeague;
@@ -1823,24 +3911,25 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
   // Back-compat: treat "hasLeague" as soccer league for existing callers.
   bool get hasLeague => _hasSoccerLeague;
   List<_JoinedDraft> get joinedDrafts {
-    final all = List<_JoinedDraft>.from(_joinedDrafts)
-      ..sort((a, b) => a.when.compareTo(b.when));
+    final now = DateTime.now();
+    final all =
+        _joinedDrafts
+            .where((draft) => !_isUnfilledDraftCanceledAt(draft, now))
+            .toList()
+          ..sort((a, b) => a.when.compareTo(b.when));
     return List.unmodifiable(all);
   }
 
   List<_JoinedDraft> get visibleDraftEntries {
     final now = DateTime.now();
-    final visible =
-        _joinedDrafts.where((draft) => !_isDraftExpiredAt(draft, now)).toList()
-          ..sort((a, b) => a.when.compareTo(b.when));
+    final visible = _activeJoinedDraftsAt(now)
+      ..sort((a, b) => a.when.compareTo(b.when));
     return List.unmodifiable(visible);
   }
 
   _JoinedDraft? get primaryDraft {
     final now = DateTime.now();
-    final visible = _joinedDrafts
-        .where((draft) => !_isDraftExpiredAt(draft, now))
-        .toList();
+    final visible = _activeJoinedDraftsAt(now);
     if (visible.isEmpty) return null;
     final upcoming = visible.where((d) => d.when.isAfter(now)).toList()
       ..sort((a, b) => a.when.compareTo(b.when));
@@ -1849,18 +3938,11 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
   }
 
   _JoinedDraft? fantasyDraftForSport(bool isSoccer) {
-    final candidates =
-        _joinedDrafts
-            .where((draft) => draft.isSoccer == isSoccer && draft.fantasyReady)
-            .toList()
-          ..sort((a, b) => a.when.compareTo(b.when));
-    if (candidates.isEmpty) return null;
-    for (final draft in candidates) {
-      if (_currentFantasyMatchupForDraft(draft) != null) {
-        return draft;
-      }
-    }
-    return candidates.first;
+    final candidates = _homeDraftOptionsForSport(isSoccer);
+    return _preferredHomeDraftFromCandidates(
+      candidates,
+      selectedLeagueId: _selectedHomeLeagueIdForSport(isSoccer),
+    );
   }
 
   _FantasyMatchupView? currentFantasyMatchupForSport(bool isSoccer) {
@@ -1869,7 +3951,356 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     return _currentFantasyMatchupForDraft(draft);
   }
 
-  Future<void> _refreshFantasySoccerScores() async {
+  List<_JoinedDraft> _homeDraftOptionsForSport(bool isSoccer) {
+    final drafts =
+        joinedDrafts
+            .where(
+              (draft) =>
+                  draft.isSoccer == isSoccer &&
+                  draft.fantasyReady &&
+                  draft.fantasyTeams.isNotEmpty &&
+                  draft.fantasySchedule.isNotEmpty,
+            )
+            .toList()
+          ..sort((a, b) => a.when.compareTo(b.when));
+    return List.unmodifiable(drafts);
+  }
+
+  List<_JoinedDraft> _activeJoinedDraftsAt(DateTime now) {
+    return _joinedDrafts
+        .where(
+          (draft) =>
+              !_isDraftExpiredAt(draft, now) &&
+              !_isUnfilledDraftCanceledAt(draft, now),
+        )
+        .toList();
+  }
+
+  _JoinedDraft? _homeDraftForSportFrom(
+    Iterable<_JoinedDraft> drafts,
+    bool isSoccer, {
+    String? selectedLeagueId,
+  }) {
+    final candidates =
+        drafts
+            .where(
+              (draft) =>
+                  draft.isSoccer == isSoccer &&
+                  draft.fantasyReady &&
+                  draft.fantasyTeams.isNotEmpty &&
+                  draft.fantasySchedule.isNotEmpty,
+            )
+            .toList()
+          ..sort((a, b) => a.when.compareTo(b.when));
+    return _preferredHomeDraftFromCandidates(
+      candidates,
+      selectedLeagueId: selectedLeagueId,
+    );
+  }
+
+  _JoinedDraft? _preferredHomeDraftFromCandidates(
+    List<_JoinedDraft> candidates, {
+    String? selectedLeagueId,
+  }) {
+    if (candidates.isEmpty) return null;
+    final normalizedSelectedLeagueId = selectedLeagueId?.trim() ?? '';
+    _JoinedDraft? selectedDraft;
+    if (normalizedSelectedLeagueId.isNotEmpty) {
+      for (final draft in candidates) {
+        if (draft.leagueId == normalizedSelectedLeagueId) {
+          selectedDraft = draft;
+          break;
+        }
+      }
+    }
+    if (selectedDraft != null &&
+        _currentFantasyMatchupForDraft(selectedDraft) != null) {
+      return selectedDraft;
+    }
+    for (final draft in candidates) {
+      if (_currentFantasyMatchupForDraft(draft) != null) {
+        return draft;
+      }
+    }
+    return selectedDraft ?? candidates.first;
+  }
+
+  Future<void> _refreshVisibleHomeKboRoundPoints({bool forceRefresh = false}) {
+    final inFlight = _visibleHomeKboRefreshFuture;
+    if (inFlight != null) return inFlight;
+
+    final lastRanAt = _lastVisibleHomeKboRefreshAt;
+    if (!forceRefresh &&
+        lastRanAt != null &&
+        DateTime.now().difference(lastRanAt) < const Duration(seconds: 5)) {
+      return Future<void>.value();
+    }
+
+    final future =
+        () async {
+          final draft = fantasyDraftForSport(false);
+          if (draft == null || draft.isSoccer) return;
+          await _refreshVisibleHomeKboRoundPointsForDraft(
+            draft,
+            forceRefresh: forceRefresh,
+          );
+          _lastVisibleHomeKboRefreshAt = DateTime.now();
+        }().whenComplete(() {
+          _visibleHomeKboRefreshFuture = null;
+        });
+    _visibleHomeKboRefreshFuture = future;
+    return future;
+  }
+
+  Future<void> _refreshVisibleHomeKboRoundPointsForDraft(
+    _JoinedDraft draft, {
+    bool forceRefresh = false,
+  }) async {
+    final now = DateTime.now();
+    final round = _currentFantasyRoundAt(draft, now);
+    final absoluteRound = _mappedKboRoundForFantasyRound(draft, round);
+    if (!_kboFantasyRoundHasStarted(draft, round, now)) return;
+    if (_shouldFreezeUnlockedKboRoundScore(draft, round, now: now)) {
+      await _ensureUnlockedKboMatchupScoreSnapshotsForDraft(draft);
+      return;
+    }
+    final matchup = _currentFantasyMatchupForDraft(draft);
+    if (matchup == null) return;
+
+    final slots = <String, _PlayerSlot>{};
+    for (final team in [matchup.myTeam, matchup.opponent]) {
+      for (final player in team.starting) {
+        final slot = player.toPlayerSlot();
+        slots[_playerSlotIdentity(slot)] = slot;
+      }
+    }
+    if (slots.isEmpty) return;
+
+    final visibleSlots = slots.values.toList(growable: false);
+    const batchSize = 4;
+    for (int index = 0; index < visibleSlots.length; index += batchSize) {
+      final batch = visibleSlots.skip(index).take(batchSize);
+      await Future.wait(
+        batch.map(
+          (slot) => _loadKboRoundPointsForPlayerShared(
+            playerName: slot.name,
+            club: _normalizeKboDraftClub(slot.club),
+            preferredNumber: slot.number,
+            preferredPosition: slot.position,
+            forceRefresh: forceRefresh,
+            targetRounds: <int>{absoluteRound},
+            logFailures: false,
+          ),
+        ),
+      );
+    }
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  bool _isSameFantasyTeamState(_FantasyTeamState a, _FantasyTeamState b) {
+    return (a.uid.isNotEmpty && b.uid.isNotEmpty && a.uid == b.uid) ||
+        a.teamName == b.teamName;
+  }
+
+  _JoinedDraft _draftWithUpdatedFantasyTeamState(
+    _JoinedDraft draft,
+    _FantasyTeamState updatedTeam,
+  ) {
+    final updatedTeams = draft.fantasyTeams.map((team) {
+      return _isSameFantasyTeamState(team, updatedTeam) ? updatedTeam : team;
+    }).toList();
+    return _JoinedDraft(
+      leagueId: draft.leagueId,
+      leagueName: draft.leagueName,
+      when: draft.when,
+      isSoccer: draft.isSoccer,
+      teamCount: draft.teamCount,
+      roundCount: draft.roundCount,
+      memberCount: draft.memberCount,
+      inviteCode: draft.inviteCode,
+      ownerId: draft.ownerId,
+      draftOrder: draft.draftOrder,
+      fantasyReady: draft.fantasyReady,
+      fantasyTeams: updatedTeams,
+      fantasySchedule: draft.fantasySchedule,
+      draftBoard: draft.draftBoard,
+    );
+  }
+
+  Future<_JoinedDraft> _captureUnlockedKboMatchupScoreSnapshotsForDraft(
+    _JoinedDraft draft,
+  ) async {
+    final now = DateTime.now();
+    final round = _currentFantasyRoundAt(draft, now);
+    final absoluteRound = _mappedKboRoundForFantasyRound(draft, round);
+    if (!_shouldFreezeUnlockedKboRoundScore(draft, round, now: now)) {
+      return draft;
+    }
+
+    final matchup = _currentFantasyMatchupForDraft(draft);
+    if (matchup == null) return draft;
+
+    final pendingTeams = [matchup.myTeam, matchup.opponent]
+        .where(
+          (team) =>
+              _kboUnlockedRoundScoreSnapshotForTeam(
+                team,
+                draft: draft,
+                round: round,
+                now: now,
+              ) ==
+              null,
+        )
+        .toList();
+    if (pendingTeams.isEmpty) return draft;
+
+    await _loadCachedKboLeagueData();
+    final slots = <String, _PlayerSlot>{};
+    for (final team in pendingTeams) {
+      for (final player in team.starting) {
+        final slot = player.toPlayerSlot();
+        slots[_playerSlotIdentity(slot)] = slot;
+      }
+    }
+    const batchSize = 4;
+    final values = slots.values.toList(growable: false);
+    for (int index = 0; index < values.length; index += batchSize) {
+      final batch = values.skip(index).take(batchSize);
+      await Future.wait(
+        batch.map(
+          (slot) => _loadKboRoundPointsForPlayerShared(
+            playerName: slot.name,
+            club: _normalizeKboDraftClub(slot.club),
+            preferredNumber: slot.number,
+            preferredPosition: slot.position,
+            targetRounds: <int>{absoluteRound},
+            logFailures: false,
+          ),
+        ),
+      );
+    }
+
+    final unlockedAt =
+        _fantasyRosterLockStateForDraft(
+          draft,
+          now: now,
+        ).unlocksAtUtc?.toUtc() ??
+        now.toUtc();
+    var updatedDraft = draft;
+    for (final originalTeam in pendingTeams) {
+      final team =
+          updatedDraft.fantasyTeams.cast<_FantasyTeamState?>().firstWhere(
+            (candidate) =>
+                candidate != null &&
+                _isSameFantasyTeamState(candidate, originalTeam),
+            orElse: () => null,
+          ) ??
+          originalTeam;
+      final existingState = _kboRoundScoreStateForTeam(team, round);
+      final nextState = _KboFantasyRoundScoreState(
+        round: round,
+        bankedScore: existingState?.bankedScore ?? 0.0,
+        starterBaselines: Map<String, double>.from(
+          existingState?.starterBaselines ?? const <String, double>{},
+        ),
+        updatedAt: now.toUtc(),
+        unlockedScoreSnapshot: _fantasyTeamRoundScore(
+          team,
+          round,
+          isSoccer: false,
+          draft: updatedDraft,
+        ),
+        unlockedAt: unlockedAt,
+      );
+      final updatedTeam = _FantasyTeamState(
+        uid: team.uid,
+        teamName: team.teamName,
+        roster: team.roster,
+        starting: team.starting,
+        bench: team.bench,
+        captainName: team.captainName,
+        viceCaptainName: team.viceCaptainName,
+        captainPlayerId: team.captainPlayerId,
+        viceCaptainPlayerId: team.viceCaptainPlayerId,
+        kboRoundScoreStates: [
+          for (final state in team.kboRoundScoreStates)
+            if (state.round != round) state,
+          nextState,
+        ]..sort((a, b) => a.round.compareTo(b.round)),
+      );
+      updatedDraft = _draftWithUpdatedFantasyTeamState(
+        updatedDraft,
+        updatedTeam,
+      );
+    }
+    return updatedDraft;
+  }
+
+  Future<_JoinedDraft> _ensureUnlockedKboMatchupScoreSnapshotsForDraft(
+    _JoinedDraft draft, {
+    bool persist = true,
+  }) async {
+    final updatedDraft = await _captureUnlockedKboMatchupScoreSnapshotsForDraft(
+      draft,
+    );
+    if (!persist || identical(updatedDraft, draft)) return updatedDraft;
+    if (!mounted) return updatedDraft;
+    setState(() {
+      _upsertJoinedDraft(updatedDraft);
+      _setPrimaryDraftFromJoinedDrafts();
+    });
+    await _saveLocalState();
+    return updatedDraft;
+  }
+
+  String? _selectedHomeLeagueIdForSport(bool isSoccer) =>
+      isSoccer ? _selectedHomeSoccerLeagueId : _selectedHomeBaseballLeagueId;
+
+  void _setSelectedHomeLeagueIdForSport(bool isSoccer, String? leagueId) {
+    setState(() {
+      if (isSoccer) {
+        _selectedHomeSoccerLeagueId = leagueId;
+      } else {
+        _selectedHomeBaseballLeagueId = leagueId;
+      }
+    });
+    unawaited(_saveLocalState());
+  }
+
+  void _sanitizeSelectedHomeLeagues() {
+    final soccerOptions = _homeDraftOptionsForSport(true);
+    final baseballOptions = _homeDraftOptionsForSport(false);
+
+    if (_selectedHomeSoccerLeagueId != null &&
+        soccerOptions.every(
+          (draft) => draft.leagueId != _selectedHomeSoccerLeagueId,
+        )) {
+      _selectedHomeSoccerLeagueId = soccerOptions.isEmpty
+          ? null
+          : soccerOptions.first.leagueId;
+    } else if (_selectedHomeSoccerLeagueId == null &&
+        soccerOptions.length == 1) {
+      _selectedHomeSoccerLeagueId = soccerOptions.first.leagueId;
+    }
+
+    if (_selectedHomeBaseballLeagueId != null &&
+        baseballOptions.every(
+          (draft) => draft.leagueId != _selectedHomeBaseballLeagueId,
+        )) {
+      _selectedHomeBaseballLeagueId = baseballOptions.isEmpty
+          ? null
+          : baseballOptions.first.leagueId;
+    } else if (_selectedHomeBaseballLeagueId == null &&
+        baseballOptions.length == 1) {
+      _selectedHomeBaseballLeagueId = baseballOptions.first.leagueId;
+    }
+  }
+
+  Future<void> _refreshFantasySoccerScores({
+    bool includeHistory = false,
+    bool forceRefreshLiveData = false,
+  }) async {
     if (_isRefreshingFantasySoccerScores) return;
     final soccerDrafts = _joinedDrafts
         .where(
@@ -1884,16 +4315,24 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
 
     _isRefreshingFantasySoccerScores = true;
     try {
+      if (forceRefreshLiveData) {
+        await _loadCachedKLeagueLeagueData(forceRefresh: true);
+      }
       for (final draft in soccerDrafts) {
         final currentRound = _currentFantasyRoundAt(draft, DateTime.now());
-        for (int round = 1; round <= currentRound; round++) {
+        final rounds = includeHistory
+            ? <int>[for (int round = 1; round <= currentRound; round++) round]
+            : <int>[currentRound];
+        for (final round in rounds) {
           await _ensureFantasySoccerRoundScoreSnapshot(
             draft,
             round,
             force: round == currentRound,
+            forceRefreshLiveData: forceRefreshLiveData && round == currentRound,
           );
         }
       }
+      unawaited(_persistFantasySoccerRoundScoreCache());
       if (!mounted) return;
       setState(() {});
     } catch (e, st) {
@@ -1909,6 +4348,12 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     return '$uid.$key';
   }
 
+  String _userStateKeyForUid(String uid, String key) {
+    final normalizedUid = uid.trim();
+    final effectiveUid = normalizedUid.isEmpty ? 'anonymous' : normalizedUid;
+    return '$effectiveUid.$key';
+  }
+
   Future<void> _safeWriteLocalState({
     required String key,
     required String value,
@@ -1917,7 +4362,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
       await _localStateStorage.write(key: key, value: value);
     } on PlatformException catch (e) {
       // iOS keychain can throw -25299("item already exists") on write.
-      final code = '${e.code}';
+      final code = e.code.toString();
       final raw = '${e.message} ${e.details}'.toLowerCase();
       final isDuplicate =
           code.contains('-25299') ||
@@ -1945,6 +4390,36 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
       key: _userStateKey(_kFrontLeagueKey),
       value: _frontLeagueIsSoccer ? '1' : '0',
     );
+    if (_joinedDrafts.isEmpty) {
+      await _localStateStorage.delete(key: _userStateKey(_kJoinedDraftsKey));
+    } else {
+      await _safeWriteLocalState(
+        key: _userStateKey(_kJoinedDraftsKey),
+        value: jsonEncode({
+          'drafts': _joinedDrafts.map((draft) => draft.toMap()).toList(),
+        }),
+      );
+    }
+    if ((_selectedHomeSoccerLeagueId ?? '').isEmpty) {
+      await _localStateStorage.delete(
+        key: _userStateKey(_kSelectedHomeSoccerLeagueKey),
+      );
+    } else {
+      await _safeWriteLocalState(
+        key: _userStateKey(_kSelectedHomeSoccerLeagueKey),
+        value: _selectedHomeSoccerLeagueId!,
+      );
+    }
+    if ((_selectedHomeBaseballLeagueId ?? '').isEmpty) {
+      await _localStateStorage.delete(
+        key: _userStateKey(_kSelectedHomeBaseballLeagueKey),
+      );
+    } else {
+      await _safeWriteLocalState(
+        key: _userStateKey(_kSelectedHomeBaseballLeagueKey),
+        value: _selectedHomeBaseballLeagueId!,
+      );
+    }
     if (_draftTime == null) {
       await _localStateStorage.delete(key: _userStateKey(_kDraftTimeKey));
       await _localStateStorage.delete(key: _userStateKey(_kDraftNameKey));
@@ -1972,6 +4447,15 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     final frontRaw = await _localStateStorage.read(
       key: _userStateKey(_kFrontLeagueKey),
     );
+    final joinedDraftsRaw = await _localStateStorage.read(
+      key: _userStateKey(_kJoinedDraftsKey),
+    );
+    final selectedSoccerLeagueIdRaw = await _localStateStorage.read(
+      key: _userStateKey(_kSelectedHomeSoccerLeagueKey),
+    );
+    final selectedBaseballLeagueIdRaw = await _localStateStorage.read(
+      key: _userStateKey(_kSelectedHomeBaseballLeagueKey),
+    );
     final draftTimeRaw = await _localStateStorage.read(
       key: _userStateKey(_kDraftTimeKey),
     );
@@ -1989,20 +4473,101 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
         ? _frontLeagueIsSoccer
         : frontRaw == '1';
     final DateTime? savedDraftTime = DateTime.tryParse(draftTimeRaw ?? '');
+    final restoredDrafts = _restoreJoinedDraftsFromLocalJson(joinedDraftsRaw);
+    final resolvedSoccer = restoredDrafts.any((draft) => draft.isSoccer)
+        ? true
+        : soccer;
+    final resolvedBaseball = restoredDrafts.any((draft) => !draft.isSoccer)
+        ? true
+        : baseball;
 
     if (!mounted) return;
     setState(() {
-      _hasSoccerLeague = soccer;
-      _hasBaseballLeague = baseball;
+      _joinedDrafts = restoredDrafts;
+      _hasSoccerLeague = resolvedSoccer;
+      _hasBaseballLeague = resolvedBaseball;
       _frontLeagueIsSoccer = frontSoccer;
+      _selectedHomeSoccerLeagueId = selectedSoccerLeagueIdRaw;
+      _selectedHomeBaseballLeagueId = selectedBaseballLeagueIdRaw;
       _draftTime = savedDraftTime;
       _draftLeagueName = savedDraftTime == null
           ? null
           : (draftNameRaw ?? 'My League');
+      _sanitizeSelectedHomeLeagues();
     });
     _startDraftTimer();
     _listenJoinedDrafts();
     await _saveLocalState();
+  }
+
+  Future<void> clearPersistedLocalStateForUid(String uid) async {
+    final normalizedUid = uid.trim();
+    if (normalizedUid.isEmpty) return;
+
+    final keys = <String>[
+      _kHasSoccerLeagueKey,
+      _kHasBaseballLeagueKey,
+      _kFrontLeagueKey,
+      _kJoinedDraftsKey,
+      _kSelectedHomeSoccerLeagueKey,
+      _kSelectedHomeBaseballLeagueKey,
+      _kDraftTimeKey,
+      _kDraftNameKey,
+    ];
+    for (final key in keys) {
+      await _localStateStorage.delete(
+        key: _userStateKeyForUid(normalizedUid, key),
+      );
+    }
+  }
+
+  List<_JoinedDraft> _restoreJoinedDraftsFromLocalJson(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      final entries = _fixtureAsList(_fixtureAsMap(decoded)['drafts']);
+      final result = <_JoinedDraft>[];
+      for (final entry in entries) {
+        if (entry is! Map) continue;
+        final map = Map<String, dynamic>.from(entry);
+        final when = DateTime.tryParse('${map['when'] ?? ''}');
+        if (when == null) continue;
+        final isSoccer = map['isSoccer'] != false;
+        result.add(
+          _JoinedDraft(
+            leagueId: '${map['leagueId'] ?? ''}',
+            leagueName: '${map['leagueName'] ?? 'My League'}',
+            when: when,
+            isSoccer: isSoccer,
+            teamCount: map['teamCount'] is int
+                ? map['teamCount'] as int
+                : int.tryParse('${map['teamCount'] ?? 8}') ?? 8,
+            roundCount: map['roundCount'] is int
+                ? map['roundCount'] as int
+                : int.tryParse('${map['roundCount'] ?? 1}') ?? 1,
+            memberCount: map['memberCount'] is int
+                ? map['memberCount'] as int
+                : int.tryParse('${map['memberCount'] ?? 1}') ?? 1,
+            inviteCode: '${map['inviteCode'] ?? ''}',
+            ownerId: '${map['ownerId'] ?? ''}',
+            draftOrder: _parseDraftOrder(map['draftOrder']),
+            fantasyReady: map['fantasyReady'] == true,
+            fantasyTeams: _parseFantasyTeams(
+              map['fantasyTeams'],
+              isSoccer: isSoccer,
+            ),
+            fantasySchedule: _parseFantasySchedule(map['fantasySchedule']),
+            draftBoard: _parseDraftBoard(map['draftBoard'], isSoccer: isSoccer),
+          ),
+        );
+      }
+      result.sort((a, b) => a.when.compareTo(b.when));
+      return result;
+    } catch (error, stackTrace) {
+      debugPrint('restoreJoinedDraftsFromLocalJson failed: $error');
+      debugPrint('$stackTrace');
+      return const [];
+    }
   }
 
   void updateLogin(bool value) {
@@ -2087,10 +4652,47 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
       _upsertJoinedDraft(draft);
       _hasSoccerLeague = _joinedDrafts.any((d) => d.isSoccer);
       _hasBaseballLeague = _joinedDrafts.any((d) => !d.isSoccer);
+      _sanitizeSelectedHomeLeagues();
       _setPrimaryDraftFromJoinedDrafts();
     });
     _startDraftTimer();
     unawaited(_saveLocalState());
+  }
+
+  void applyFantasyDisplayNameForUser({
+    required String uid,
+    required String teamName,
+  }) {
+    final normalizedUid = uid.trim();
+    final normalizedTeamName = teamName.trim();
+    if (normalizedUid.isEmpty || normalizedTeamName.isEmpty) return;
+
+    setState(() {
+      _joinedDrafts =
+          _joinedDrafts
+              .map(
+                (draft) => _joinedDraftWithRenamedFantasyIdentity(
+                  draft,
+                  uid: normalizedUid,
+                  teamName: normalizedTeamName,
+                ),
+              )
+              .toList()
+            ..sort((a, b) => a.when.compareTo(b.when));
+      _hasSoccerLeague = _joinedDrafts.any((d) => d.isSoccer);
+      _hasBaseballLeague = _joinedDrafts.any((d) => !d.isSoccer);
+      _sanitizeSelectedHomeLeagues();
+      _setPrimaryDraftFromJoinedDrafts();
+    });
+    _startDraftTimer();
+    unawaited(_saveLocalState());
+  }
+
+  void _applyCurrentUserFantasyDisplayNameIfAvailable() {
+    final uid = FirebaseAuth.instance.currentUser?.uid.trim() ?? '';
+    final teamName = _currentSignedInFantasyDisplayName();
+    if (uid.isEmpty || teamName.isEmpty) return;
+    applyFantasyDisplayNameForUser(uid: uid, teamName: teamName);
   }
 
   void _upsertJoinedDraft(_JoinedDraft draft) {
@@ -2121,10 +4723,30 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
       _joinedDrafts = next;
       _hasSoccerLeague = next.any((d) => d.isSoccer);
       _hasBaseballLeague = next.any((d) => !d.isSoccer);
+      _sanitizeSelectedHomeLeagues();
       _setPrimaryDraftFromJoinedDrafts();
     });
     _startDraftTimer();
     unawaited(_saveLocalState());
+  }
+
+  Future<void> _cleanupCanceledUnfilledDraft(_JoinedDraft draft) async {
+    if (draft.leagueId.isEmpty) return;
+    if (_cancelingUnfilledLeagueIds.contains(draft.leagueId)) return;
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || draft.ownerId != user.uid) return;
+
+    _cancelingUnfilledLeagueIds.add(draft.leagueId);
+    try {
+      await LeagueService.instance.deleteLeague(draft.leagueId);
+    } catch (e, st) {
+      debugPrint(
+        'cleanupCanceledUnfilledDraft failed for ${draft.leagueId}: $e',
+      );
+      debugPrint('$st');
+    } finally {
+      _cancelingUnfilledLeagueIds.remove(draft.leagueId);
+    }
   }
 
   void _listenJoinedDrafts() {
@@ -2139,7 +4761,10 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
         .where('members', arrayContains: user.uid)
         .snapshots()
         .listen(
-          (snapshot) {
+          (snapshot) async {
+            if (snapshot.docs.any((doc) => _parseIsSoccerLeague(doc.data()))) {
+              await _loadCachedKLeagueLeagueData();
+            }
             final drafts = <_JoinedDraft>[];
             for (final doc in snapshot.docs) {
               final data = doc.data();
@@ -2148,6 +4773,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
               final name = (data['name'] as String?)?.trim().isNotEmpty == true
                   ? (data['name'] as String).trim()
                   : 'My League';
+              final isSoccer = _parseIsSoccerLeague(data);
               final members = List<String>.from(
                 (data['members'] as List<dynamic>? ?? const []).map(
                   (e) => '$e',
@@ -2157,35 +4783,93 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                 leagueId: doc.id,
                 leagueName: name,
                 when: when,
-                isSoccer: _parseIsSoccerLeague(data),
+                isSoccer: isSoccer,
                 teamCount: _parseTeamCount(data),
-                roundCount: _parseRoundCount(data, _parseIsSoccerLeague(data)),
+                roundCount: _parseRoundCount(data, isSoccer, when),
                 memberCount: members.length,
                 inviteCode: '${data['inviteCode'] ?? ''}',
                 ownerId: '${data['ownerId'] ?? ''}',
                 draftOrder: _parseDraftOrder(data['draftOrder']),
                 fantasyReady: data['fantasyReady'] == true,
-                fantasyTeams: _parseFantasyTeams(data['fantasyTeams']),
+                fantasyTeams: _parseFantasyTeams(
+                  data['fantasyTeams'],
+                  isSoccer: isSoccer,
+                ),
                 fantasySchedule: _parseFantasySchedule(data['fantasySchedule']),
-                draftBoard: _parseDraftBoard(data['draftBoard']),
+                draftBoard: _parseDraftBoard(
+                  data['draftBoard'],
+                  isSoccer: isSoccer,
+                ),
               );
               drafts.add(draft);
             }
+            final now = DateTime.now();
+            final canceledUnfilledDrafts = drafts
+                .where((draft) => _isUnfilledDraftCanceledAt(draft, now))
+                .toList();
+            final activeDrafts =
+                drafts
+                    .where((draft) => !_isUnfilledDraftCanceledAt(draft, now))
+                    .toList()
+                  ..sort((a, b) => a.when.compareTo(b.when));
             drafts.sort((a, b) => a.when.compareTo(b.when));
+            if (activeDrafts.any((draft) => !draft.isSoccer)) {
+              await _restorePersistedKLeaguePlayerRoundPointsCache();
+              final visibleBaseballDraft = _homeDraftForSportFrom(
+                activeDrafts,
+                false,
+                selectedLeagueId: _selectedHomeBaseballLeagueId,
+              );
+              if (visibleBaseballDraft != null) {
+                final updatedVisibleBaseballDraft =
+                    await _ensureUnlockedKboMatchupScoreSnapshotsForDraft(
+                      visibleBaseballDraft,
+                      persist: false,
+                    );
+                if (!identical(
+                  updatedVisibleBaseballDraft,
+                  visibleBaseballDraft,
+                )) {
+                  final index = activeDrafts.indexWhere(
+                    (draft) =>
+                        draft.leagueId == visibleBaseballDraft.leagueId &&
+                        draft.isSoccer == visibleBaseballDraft.isSoccer,
+                  );
+                  if (index >= 0) {
+                    activeDrafts[index] = updatedVisibleBaseballDraft;
+                  }
+                } else {
+                  await _refreshVisibleHomeKboRoundPointsForDraft(
+                    visibleBaseballDraft,
+                  );
+                }
+              }
+            }
             if (!mounted) return;
             setState(() {
-              _joinedDrafts = drafts;
-              _hasSoccerLeague = drafts.any((d) => d.isSoccer);
-              _hasBaseballLeague = drafts.any((d) => !d.isSoccer);
+              for (final draft in canceledUnfilledDrafts) {
+                _draftSessionCache.remove(
+                  _draftSessionKeyForJoinedDraft(draft),
+                );
+              }
+              _joinedDrafts = activeDrafts;
+              _hasSoccerLeague = activeDrafts.any((d) => d.isSoccer);
+              _hasBaseballLeague = activeDrafts.any((d) => !d.isSoccer);
+              _sanitizeSelectedHomeLeagues();
               _setPrimaryDraftFromJoinedDrafts();
             });
             unawaited(_refreshFantasySoccerScores());
-            for (final draft in drafts) {
+            unawaited(_refreshVisibleHomeKboRoundPoints());
+            for (final draft in canceledUnfilledDrafts) {
+              unawaited(_cleanupCanceledUnfilledDraft(draft));
+            }
+            for (final draft in activeDrafts) {
               if (_shouldRecoverFantasyLeague(draft)) {
                 unawaited(_recoverFantasyLeagueState(draft));
               }
             }
             _startDraftTimer();
+            unawaited(_saveLocalState());
           },
           onError: (e, st) {
             debugPrint('watchMyDrafts error: $e');
@@ -2236,6 +4920,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
         );
         _hasSoccerLeague = _joinedDrafts.any((d) => d.isSoccer);
         _hasBaseballLeague = _joinedDrafts.any((d) => !d.isSoccer);
+        _sanitizeSelectedHomeLeagues();
         _setPrimaryDraftFromJoinedDrafts();
       });
       unawaited(_refreshFantasySoccerScores());
@@ -2264,11 +4949,25 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     return 8;
   }
 
-  int _parseRoundCount(Map<String, dynamic> data, bool isSoccer) {
+  int _parseRoundCount(
+    Map<String, dynamic> data,
+    bool isSoccer,
+    DateTime? draftDate,
+  ) {
+    if (!isSoccer) {
+      return _kboFantasyRoundCountForDraft(draftDate);
+    }
+    final cachedLeagueData = _cachedKLeagueLeagueData;
+    final rawFixtures = _fixtureAsList(cachedLeagueData?['fixtures']);
+    if (rawFixtures.isNotEmpty) {
+      return _kLeagueFantasyRoundCountForDraft(draftDate, rawFixtures);
+    }
     final raw = data['roundCount'];
     if (raw is int) return raw;
-    if (raw is String) return int.tryParse(raw) ?? (isSoccer ? 19 : 34);
-    return isSoccer ? 19 : 34;
+    if (raw is String) {
+      return int.tryParse(raw) ?? _defaultFantasyRoundCount(isSoccer: true);
+    }
+    return _defaultFantasyRoundCount(isSoccer: true);
   }
 
   List<_DraftOrderEntry> _parseDraftOrder(dynamic raw) {
@@ -2278,10 +4977,14 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     for (final item in list) {
       if (item is! Map) continue;
       final map = Map<String, dynamic>.from(item);
+      final uid = '${map['uid'] ?? ''}';
       result.add(
         _DraftOrderEntry(
-          uid: '${map['uid'] ?? ''}',
-          displayName: '${map['displayName'] ?? 'Team'}',
+          uid: uid,
+          displayName: _normalizedFantasyDisplayNameForUid(
+            uid,
+            '${map['displayName'] ?? 'Team'}',
+          ),
           slot: map['slot'] is int
               ? map['slot'] as int
               : int.tryParse('${map['slot'] ?? 0}') ?? 0,
@@ -2311,9 +5014,8 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
 
   void _setPrimaryDraftFromJoinedDrafts() {
     final now = DateTime.now();
-    final visible =
-        _joinedDrafts.where((draft) => !_isDraftExpiredAt(draft, now)).toList()
-          ..sort((a, b) => a.when.compareTo(b.when));
+    final visible = _activeJoinedDraftsAt(now)
+      ..sort((a, b) => a.when.compareTo(b.when));
 
     if (visible.isEmpty) {
       _draftTime = null;
@@ -2347,21 +5049,41 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
   void _tickDraft() {
     final now = DateTime.now();
     if (!mounted) return;
+    final canceledUnfilledDrafts = _joinedDrafts
+        .where((draft) => _isUnfilledDraftCanceledAt(draft, now))
+        .toList();
+    final expiredDrafts = _joinedDrafts
+        .where((draft) => _isDraftExpiredAt(draft, now))
+        .toList();
     setState(() {
-      final expiredDrafts = _joinedDrafts
-          .where((draft) => _isDraftExpiredAt(draft, now))
-          .toList();
+      if (canceledUnfilledDrafts.isNotEmpty) {
+        final canceledIds = canceledUnfilledDrafts
+            .map((draft) => draft.leagueId)
+            .toSet();
+        _joinedDrafts =
+            _joinedDrafts
+                .where((draft) => !canceledIds.contains(draft.leagueId))
+                .toList()
+              ..sort((a, b) => a.when.compareTo(b.when));
+      }
       for (final draft in expiredDrafts) {
         _draftSessionCache.remove(_draftSessionKeyForJoinedDraft(draft));
       }
       _hasSoccerLeague = _joinedDrafts.any((d) => d.isSoccer);
       _hasBaseballLeague = _joinedDrafts.any((d) => !d.isSoccer);
+      _sanitizeSelectedHomeLeagues();
       _setPrimaryDraftFromJoinedDrafts();
       if (_draftTime != null) {
         final remaining = _draftTime!.difference(now);
         _draftRemaining = remaining.isNegative ? Duration.zero : remaining;
       }
     });
+    for (final draft in canceledUnfilledDrafts) {
+      unawaited(_cleanupCanceledUnfilledDraft(draft));
+    }
+    if (canceledUnfilledDrafts.isNotEmpty) {
+      unawaited(_saveLocalState());
+    }
     if (_draftTime == null && _joinedDrafts.isEmpty) {
       _draftTimer?.cancel();
     }
@@ -2441,20 +5163,39 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
 
     _searchController = TextEditingController();
     _suggestionsScrollController = ScrollController();
-    _playerDirectory = getAllPlayerNames();
-    _leagueFuture = ApiService.fetchLeagueData();
-    _kboLeagueFuture = ApiService.fetchKboLeagueData();
-    _kboLiveRefreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+    _playerDirectory = _buildSoccerSearchDirectory();
+    unawaited(_primeHomePlayerDirectory());
+    unawaited(_ensureProfileAvatarPathLoaded());
+    _leagueFuture = _loadCachedKLeagueLeagueData(forceRefresh: true);
+    _kboLeagueFuture = _loadCachedKboLeagueData(forceRefresh: true);
+    unawaited(
+      _restorePersistedFantasySoccerRoundScoreCache().then((_) {
+        if (!mounted) return;
+        setState(() {});
+      }),
+    );
+    unawaited(_restorePersistedKLeaguePlayerAptsCache());
+    unawaited(
+      _restorePersistedKLeaguePlayerRoundPointsCache().then((_) {
+        if (!mounted) return;
+        setState(() {});
+      }),
+    );
+    unawaited(_refreshVisibleHomeKboRoundPoints());
+    _kboLiveRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (!mounted) return;
+      if (_backgroundLiveRefreshSuspended) return;
       setState(() {
-        _leagueFuture = ApiService.fetchLeagueData();
-        _kboLeagueFuture = ApiService.fetchKboLeagueData();
+        _leagueFuture = _loadCachedKLeagueLeagueData(forceRefresh: true);
+        _kboLeagueFuture = _loadCachedKboLeagueData(forceRefresh: true);
       });
-      unawaited(_refreshFantasySoccerScores());
+      unawaited(_refreshFantasySoccerScores(forceRefreshLiveData: true));
+      unawaited(_refreshVisibleHomeKboRoundPoints(forceRefresh: true));
     });
 
     // Restore persisted login state.
     _isLoggedIn = authController.isLoggedIn;
+    _lastAvatarCacheAuthUid = _activeProfileAvatarUid();
     authController.addListener(_syncAuthToHomeState);
 
     _fadeController = AnimationController(
@@ -2472,25 +5213,25 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     // App launch transition (home animates in without a dedicated splash page).
     _launchController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 1000),
     );
     _launchScale = Tween<double>(begin: 1.0, end: 0.92).animate(
       CurvedAnimation(
         parent: _launchController,
-        curve: const Interval(0.0, 0.60, curve: Curves.easeOutCubic),
+        curve: const Interval(0.0, 0.65, curve: Curves.easeOutCubic),
       ),
     );
     _launchSlide =
-        Tween<Offset>(begin: Offset.zero, end: const Offset(0, -0.06)).animate(
+        Tween<Offset>(begin: Offset.zero, end: const Offset(0, -0.03)).animate(
           CurvedAnimation(
             parent: _launchController,
-            curve: const Interval(0.0, 0.60, curve: Curves.easeOutCubic),
+            curve: const Interval(0.0, 0.65, curve: Curves.easeOutCubic),
           ),
         );
     _launchOpacity = Tween<double>(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(
         parent: _launchController,
-        curve: const Interval(0.25, 1.0, curve: Curves.easeInCubic),
+        curve: const Interval(0.7, 1.0, curve: Curves.easeInCubic),
       ),
     );
 
@@ -2508,6 +5249,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
 
     _startDraftTimer();
     unawaited(_restoreLocalState());
+    unawaited(_initLeagueLinkHandling());
 
     assert(() {
       // Only apply demo-random state when no persisted session exists.
@@ -2516,23 +5258,48 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     }());
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic>) {
+      appRouteObserver.unsubscribe(this);
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
   void _syncAuthToHomeState() {
     if (!mounted) return;
     final v = authController.isLoggedIn;
+    final currentAuthUid = _activeProfileAvatarUid();
+    if (_lastAvatarCacheAuthUid != currentAuthUid) {
+      _clearPublicProfileAvatarUrlCache();
+      _lastAvatarCacheAuthUid = currentAuthUid;
+    }
     if (_isLoggedIn == v) {
       if (v) {
+        unawaited(_ensureProfileAvatarPathLoaded());
         unawaited(_restoreLocalState());
         _listenJoinedDrafts();
+        _applyCurrentUserFantasyDisplayNameIfAvailable();
+      } else {
+        unawaited(_ensureProfileAvatarPathLoaded(uid: ''));
       }
       return;
     }
     setState(() => _isLoggedIn = v);
     if (v) {
+      unawaited(_ensureProfileAvatarPathLoaded());
       unawaited(_restoreLocalState());
       _listenJoinedDrafts();
+      _applyCurrentUserFantasyDisplayNameIfAvailable();
+      if ((_pendingInviteCodeFromLink ?? '').isNotEmpty) {
+        unawaited(_handleIncomingInviteCode(_pendingInviteCodeFromLink!));
+      }
       return;
     }
     if (!v) {
+      unawaited(_ensureProfileAvatarPathLoaded(uid: ''));
       // When logging out, clear league/draft state (same behavior as before).
       setState(() {
         _hasSoccerLeague = false;
@@ -2549,8 +5316,88 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     }
   }
 
+  Future<void> _initLeagueLinkHandling() async {
+    _appLinks ??= AppLinks();
+    try {
+      final initialUri = await _appLinks!.getInitialLink();
+      if (initialUri != null) {
+        unawaited(_handleIncomingLeagueUri(initialUri));
+      }
+    } catch (e, st) {
+      debugPrint('initLeagueLinkHandling initial link failed: $e');
+      debugPrint('$st');
+    }
+
+    _incomingLeagueLinkSub?.cancel();
+    _incomingLeagueLinkSub = _appLinks!.uriLinkStream.listen(
+      (uri) {
+        unawaited(_handleIncomingLeagueUri(uri));
+      },
+      onError: (error, stackTrace) {
+        debugPrint('league link stream error: $error');
+        debugPrint('$stackTrace');
+      },
+    );
+  }
+
+  Future<void> _handleIncomingLeagueUri(Uri uri) async {
+    if (uri.scheme.toLowerCase() != 'leagueit') return;
+
+    final serialized = uri.toString();
+    if (_lastHandledLeagueLink == serialized) return;
+
+    final host = uri.host.toLowerCase();
+    final firstPath = uri.pathSegments.isEmpty
+        ? ''
+        : uri.pathSegments.first.toLowerCase();
+    if (host != 'join' && firstPath != 'join') return;
+
+    final inviteCode = uri.queryParameters['code']?.trim().toUpperCase() ?? '';
+    if (inviteCode.isEmpty) return;
+
+    _lastHandledLeagueLink = serialized;
+    await _handleIncomingInviteCode(inviteCode);
+  }
+
+  Future<void> _handleIncomingInviteCode(String inviteCode) async {
+    final code = inviteCode.trim().toUpperCase();
+    if (code.isEmpty) return;
+    if (_isHandlingInviteCodeFromLink) return;
+
+    if (!authController.isLoggedIn) {
+      _pendingInviteCodeFromLink = code;
+      return;
+    }
+
+    _pendingInviteCodeFromLink = null;
+    _isHandlingInviteCodeFromLink = true;
+    try {
+      final data = await LeagueService.instance.joinLeagueByInviteCode(code);
+      if (!mounted) return;
+      final joined = _joinedDraftFromJoinLeagueResponse(
+        data,
+        fallbackCode: code,
+      );
+      addOrUpdateJoinedDraft(joined);
+      setHasLeagueForSport(joined.isSoccer, true);
+      await Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => DraftDetailPage(draft: joined)));
+    } catch (e, st) {
+      debugPrint('handleIncomingInviteCode failed: $e');
+      debugPrint('$st');
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('리그 참가 실패: $e')));
+    } finally {
+      _isHandlingInviteCodeFromLink = false;
+    }
+  }
+
   @override
   void dispose() {
+    appRouteObserver.unsubscribe(this);
     _searchController.dispose();
     _suggestionsScrollController.dispose();
     authController.removeListener(_syncAuthToHomeState);
@@ -2558,11 +5405,18 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     _launchController.dispose();
     _draftTimer?.cancel();
     _kboLiveRefreshTimer?.cancel();
+    _incomingLeagueLinkSub?.cancel();
     _joinedDraftsSub?.cancel();
     super.dispose();
   }
 
+  @override
+  void didPopNext() {
+    _resetSearchUi();
+  }
+
   void _toggleMenu() {
+    _resetSearchUi();
     setState(() {
       _isMenuOpen = !_isMenuOpen;
       _isMyPageOpen = false;
@@ -2570,12 +5424,260 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
   }
 
   void _toggleMyPage() {
+    _resetSearchUi();
     setState(() => _isMyPageOpen = !_isMyPageOpen);
+  }
+
+  List<_HomeSearchSuggestion> _buildSoccerSearchDirectory() {
+    final entries =
+        _docMetaByName.entries
+            .map(
+              (entry) => _HomeSearchSuggestion(
+                name: entry.key,
+                isSoccer: true,
+                meta: entry.value,
+              ),
+            )
+            .toList()
+          ..sort((a, b) => a.name.compareTo(b.name));
+    return entries;
+  }
+
+  Future<void> _primeHomePlayerDirectory() async {
+    try {
+      final kboPool = await _loadKboDraftPlayerPool();
+      final kboEntries = kboPool
+          .map(
+            (player) => _HomeSearchSuggestion(
+              name: player.name,
+              isSoccer: false,
+              meta: _DocPlayerMeta(
+                position: player.position,
+                club: player.club,
+                number: player.number,
+              ),
+            ),
+          )
+          .toList();
+      final combined =
+          <_HomeSearchSuggestion>[
+            ..._buildSoccerSearchDirectory(),
+            ...kboEntries,
+          ]..sort((a, b) {
+            final nameCompare = a.name.compareTo(b.name);
+            if (nameCompare != 0) return nameCompare;
+            final leagueCompare = a.isSoccer == b.isSoccer
+                ? 0
+                : (a.isSoccer ? -1 : 1);
+            if (leagueCompare != 0) return leagueCompare;
+            final clubCompare = a.meta.club.compareTo(b.meta.club);
+            if (clubCompare != 0) return clubCompare;
+            return a.meta.position.compareTo(b.meta.position);
+          });
+      if (!mounted) return;
+      setState(() {
+        _playerDirectory = combined;
+      });
+    } catch (error, stackTrace) {
+      debugPrint('primeHomePlayerDirectory failed: $error');
+      debugPrint('$stackTrace');
+    }
+  }
+
+  void _closeSuggestionsOverlay() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (_suggestionsVisible) {
+      _resetSuggestionsScroll();
+      setState(() => _suggestionsVisible = false);
+    }
+  }
+
+  void _resetSearchUi() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    _resetSuggestionsScroll();
+    setState(() {
+      _suggestionsVisible = false;
+      _suggestions = [];
+    });
+    if (_searchController.text.isNotEmpty) {
+      _searchController.clear();
+    }
+  }
+
+  Future<void> _showHomeLeagueDropdown() async {
+    _closeSuggestionsOverlay();
+    final options = _homeDraftOptionsForSport(_frontLeagueIsSoccer);
+    if (options.isEmpty) return;
+    final currentDraft = fantasyDraftForSport(_frontLeagueIsSoccer);
+    final currentLeagueId = currentDraft?.leagueId;
+    final box = _homeTitleKey.currentContext?.findRenderObject() as RenderBox?;
+    final overlay =
+        Overlay.of(context).context.findRenderObject() as RenderBox?;
+    if (box == null || overlay == null) return;
+    final offset = box.localToGlobal(Offset.zero, ancestor: overlay);
+    final selected = await showGeneralDialog<String>(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Close',
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 220),
+      pageBuilder: (dialogContext, animation, secondaryAnimation) {
+        final accent = _frontLeagueIsSoccer
+            ? const Color(0xFF2E9B50)
+            : const Color(0xFFB26A00);
+        final accentSoft = _frontLeagueIsSoccer
+            ? const Color(0xFFE7F7EA)
+            : const Color(0xFFFFF1D6);
+        final selectedLeagueId =
+            currentLeagueId ??
+            _selectedHomeLeagueIdForSport(_frontLeagueIsSoccer);
+        return Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onTap: () => Navigator.of(dialogContext).pop(),
+                child: const SizedBox.expand(),
+              ),
+            ),
+            Positioned(
+              left: offset.dx,
+              top: offset.dy + box.size.height + 10,
+              width: box.size.width,
+              child: Material(
+                color: Colors.transparent,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.96),
+                    borderRadius: BorderRadius.circular(22),
+                    border: Border.all(color: Colors.black.withOpacity(0.06)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.10),
+                        blurRadius: 28,
+                        offset: const Offset(0, 14),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (int i = 0; i < options.length; i++) ...[
+                        InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => Navigator.of(
+                            dialogContext,
+                          ).pop(options[i].leagueId),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 11,
+                            ),
+                            decoration: BoxDecoration(
+                              color: currentLeagueId == options[i].leagueId
+                                  ? accentSoft
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: accent,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    options[i].leagueName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight:
+                                          currentLeagueId == options[i].leagueId
+                                          ? FontWeight.w900
+                                          : FontWeight.w800,
+                                      color: Colors.black.withOpacity(0.86),
+                                    ),
+                                  ),
+                                ),
+                                if (currentLeagueId == options[i].leagueId)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      '현재',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w900,
+                                        color: accent,
+                                      ),
+                                    ),
+                                  )
+                                else if (selectedLeagueId ==
+                                    options[i].leagueId)
+                                  Icon(
+                                    Icons.check_rounded,
+                                    size: 16,
+                                    color: accent,
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        if (i != options.length - 1)
+                          Divider(
+                            height: 8,
+                            thickness: 0.8,
+                            color: Colors.black.withOpacity(0.05),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+      transitionBuilder: (context, animation, secondaryAnimation, child) {
+        final curved = CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+          reverseCurve: Curves.easeInCubic,
+        );
+        return FadeTransition(
+          opacity: curved,
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, -0.06),
+              end: Offset.zero,
+            ).animate(curved),
+            child: child,
+          ),
+        );
+      },
+    );
+    if (selected == null) return;
+    _setSelectedHomeLeagueIdForSport(_frontLeagueIsSoccer, selected);
   }
 
   @override
   Widget build(BuildContext context) {
-    final double sidebarWidth = MediaQuery.of(context).size.width * 0.42;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final double sidebarWidth = (screenWidth * 0.72).clamp(280.0, 340.0);
     const double topGap = 140;
 
     return Stack(
@@ -2585,6 +5687,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
         ////////////////////////////////////////////////////////////////
         Scaffold(
           backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+          resizeToAvoidBottomInset: false,
           appBar: PreferredSize(
             preferredSize: const Size.fromHeight(60),
             child: _CustomAppBar(
@@ -2621,6 +5724,8 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                                           isLoggedIn: _isLoggedIn,
                                           hasSoccerLeague: _hasSoccerLeague,
                                           hasBaseballLeague: _hasBaseballLeague,
+                                          frontLeagueIsSoccer:
+                                              _frontLeagueIsSoccer,
                                           onFrontLeagueChanged: (isSoccer) {
                                             if (_frontLeagueIsSoccer ==
                                                 isSoccer) {
@@ -2644,12 +5749,27 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                                   right: 0,
                                   child: FadeTransition(
                                     opacity: _fadeAnimation,
-                                    child: const Center(
-                                      child: Text(
-                                        'LeagueIt',
-                                        style: TextStyle(
-                                          fontSize: 45,
-                                          fontWeight: FontWeight.bold,
+                                    child: Center(
+                                      child: InkWell(
+                                        key: _homeTitleKey,
+                                        borderRadius: BorderRadius.circular(16),
+                                        onTap: _showHomeLeagueDropdown,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: const [
+                                            Text(
+                                              'LeagueIt',
+                                              style: TextStyle(
+                                                fontSize: 45,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            SizedBox(width: 6),
+                                            Icon(
+                                              Icons.arrow_drop_down,
+                                              size: 20,
+                                            ),
+                                          ],
                                         ),
                                       ),
                                     ),
@@ -2662,6 +5782,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                                     right: 0,
                                     child: GestureDetector(
                                       onTap: () {
+                                        _resetSearchUi();
                                         final draft =
                                             homeKey.currentState?.primaryDraft;
                                         Navigator.push(
@@ -2703,6 +5824,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                                 GestureDetector(
                                   behavior: HitTestBehavior.opaque,
                                   onTap: () {
+                                    _resetSearchUi();
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
@@ -2726,6 +5848,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                                 GestureDetector(
                                   behavior: HitTestBehavior.opaque,
                                   onTap: () {
+                                    _resetSearchUi();
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute(
@@ -2755,100 +5878,210 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                   },
                 ),
               ),
-              if (_suggestions.isNotEmpty)
-                Positioned(
-                  top: 1, // 검색창 언더바에 바짝
-                  right: 70,
-                  child: Material(
-                    elevation: 8,
-                    borderRadius: BorderRadius.circular(12),
-                    color: Theme.of(context).cardColor,
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        minWidth: 190,
-                        maxWidth: 190,
-                      ),
-                      child: Builder(
-                        builder: (context) {
-                          const double maxH = 220;
-                          const double rowH = 44;
-                          final double desiredH = _suggestions.length * rowH;
-                          final bool needsScroll = desiredH > maxH;
-                          final double height = (needsScroll ? maxH : desiredH)
-                              .clamp(rowH, maxH);
+              if (_suggestionsVisible)
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onTap: _closeSuggestionsOverlay,
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+              Positioned(
+                top: 1,
+                right: 70,
+                child: AnimatedSlide(
+                  duration: const Duration(milliseconds: 220),
+                  curve: Curves.easeOutCubic,
+                  offset: _suggestionsVisible
+                      ? Offset.zero
+                      : const Offset(0, -0.14),
+                  child: AnimatedOpacity(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    opacity: _suggestionsVisible ? 1 : 0,
+                    child: IgnorePointer(
+                      ignoring: !_suggestionsVisible,
+                      child: Material(
+                        elevation: 8,
+                        borderRadius: BorderRadius.circular(12),
+                        color: Theme.of(context).cardColor,
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            minWidth: 190,
+                            maxWidth: 190,
+                          ),
+                          child: Builder(
+                            builder: (context) {
+                              const double maxH = 220;
+                              const double rowH = 52;
+                              final double desiredH =
+                                  _suggestions.length * rowH;
+                              final bool needsScroll = desiredH > maxH;
+                              final double contentHeight =
+                                  (_suggestions.isEmpty
+                                          ? 0
+                                          : (needsScroll ? maxH : desiredH))
+                                      .clamp(0, maxH)
+                                      .toDouble();
 
-                          return SizedBox(
-                            height: height,
-                            child: ScrollbarTheme(
-                              data: ScrollbarThemeData(
-                                thumbColor: const WidgetStatePropertyAll(
-                                  Colors.white,
-                                ),
-                                trackColor: WidgetStatePropertyAll(
-                                  Colors.white.withOpacity(0.18),
-                                ),
-                                thickness: const WidgetStatePropertyAll(4),
-                                radius: const Radius.circular(999),
-                              ),
-                              child: Scrollbar(
-                                controller: _suggestionsScrollController,
-                                thumbVisibility: needsScroll,
-                                trackVisibility: needsScroll,
-                                child: ListView.builder(
-                                  controller: _suggestionsScrollController,
-                                  padding: EdgeInsets.zero,
-                                  itemExtent: rowH,
-                                  itemCount: _suggestions.length,
-                                  itemBuilder: (_, i) {
-                                    final name = _suggestions[i];
-                                    final meta = _resolvePlayerMeta(name);
-                                    final isDark =
-                                        Theme.of(context).brightness ==
-                                        Brightness.dark;
-                                    final Color muted = isDark
-                                        ? Colors.white70
-                                        : Colors.black.withOpacity(0.55);
-                                    return ListTile(
-                                      dense: true,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 12,
+                              return ClipRect(
+                                child: AnimatedAlign(
+                                  duration: const Duration(milliseconds: 220),
+                                  curve: Curves.easeOutCubic,
+                                  alignment: Alignment.topCenter,
+                                  heightFactor: _suggestionsVisible ? 1 : 0,
+                                  child: SizedBox(
+                                    height: contentHeight,
+                                    child: contentHeight == 0
+                                        ? const SizedBox.shrink()
+                                        : ScrollbarTheme(
+                                            data: ScrollbarThemeData(
+                                              thumbColor:
+                                                  const WidgetStatePropertyAll(
+                                                    Colors.white,
+                                                  ),
+                                              trackColor:
+                                                  WidgetStatePropertyAll(
+                                                    Colors.white.withOpacity(
+                                                      0.18,
+                                                    ),
+                                                  ),
+                                              thickness:
+                                                  const WidgetStatePropertyAll(
+                                                    4,
+                                                  ),
+                                              radius: const Radius.circular(
+                                                999,
+                                              ),
+                                            ),
+                                            child: Scrollbar(
+                                              controller:
+                                                  _suggestionsScrollController,
+                                              thumbVisibility: needsScroll,
+                                              trackVisibility: needsScroll,
+                                              child: ListView.builder(
+                                                controller:
+                                                    _suggestionsScrollController,
+                                                padding: EdgeInsets.zero,
+                                                itemExtent: rowH,
+                                                itemCount: _suggestions.length,
+                                                itemBuilder: (_, i) {
+                                                  final suggestion =
+                                                      _suggestions[i];
+                                                  final meta = suggestion.meta;
+                                                  final isDark =
+                                                      Theme.of(
+                                                        context,
+                                                      ).brightness ==
+                                                      Brightness.dark;
+                                                  final Color muted = isDark
+                                                      ? Colors.white70
+                                                      : Colors.black
+                                                            .withOpacity(0.55);
+                                                  return ListTile(
+                                                    dense: true,
+                                                    contentPadding:
+                                                        const EdgeInsets.symmetric(
+                                                          horizontal: 12,
+                                                        ),
+                                                    title: Text(
+                                                      suggestion.name,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                        fontSize: 13,
+                                                      ),
+                                                    ),
+                                                    subtitle: Text(
+                                                      meta.club,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: muted,
+                                                      ),
+                                                    ),
+                                                    trailing: SizedBox(
+                                                      width: 52,
+                                                      child: Align(
+                                                        alignment: Alignment
+                                                            .centerRight,
+                                                        child: Container(
+                                                          padding:
+                                                              const EdgeInsets.symmetric(
+                                                                horizontal: 8,
+                                                                vertical: 4,
+                                                              ),
+                                                          decoration: BoxDecoration(
+                                                            color:
+                                                                suggestion
+                                                                    .isSoccer
+                                                                ? const Color(
+                                                                    0xFFE7F7EA,
+                                                                  )
+                                                                : const Color(
+                                                                    0xFFFFF1D6,
+                                                                  ),
+                                                            borderRadius:
+                                                                BorderRadius.circular(
+                                                                  999,
+                                                                ),
+                                                          ),
+                                                          child: Text(
+                                                            suggestion.isSoccer
+                                                                ? 'K리그'
+                                                                : 'KBO',
+                                                            maxLines: 1,
+                                                            overflow:
+                                                                TextOverflow
+                                                                    .ellipsis,
+                                                            textAlign:
+                                                                TextAlign.right,
+                                                            style: TextStyle(
+                                                              fontSize: 10,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w800,
+                                                              color:
+                                                                  suggestion
+                                                                      .isSoccer
+                                                                  ? const Color(
+                                                                      0xFF2E9B50,
+                                                                    )
+                                                                  : const Color(
+                                                                      0xFFB26A00,
+                                                                    ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    onTap: () =>
+                                                        _openSearchSuggestion(
+                                                          suggestion,
+                                                        ),
+                                                  );
+                                                },
+                                              ),
+                                            ),
                                           ),
-                                      title: Text(
-                                        name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      trailing: SizedBox(
-                                        width: 88,
-                                        child: Text(
-                                          '${meta.club} #${meta.number}',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          textAlign: TextAlign.right,
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w800,
-                                            color: muted,
-                                          ),
-                                        ),
-                                      ),
-                                      onTap: () => _handleSearch(name),
-                                    );
-                                  },
+                                  ),
                                 ),
-                              ),
-                            ),
-                          );
-                        },
+                              );
+                            },
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
+              ),
             ],
           ),
         ),
@@ -2878,60 +6111,18 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
           child: SideMenu(width: sidebarWidth),
         ),
 
-        ////////////////////////////////////////////////////////////////
-        /// DIM BACKGROUND (MY PAGE)
-        ////////////////////////////////////////////////////////////////
-        IgnorePointer(
-          ignoring: !_isMyPageOpen,
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 160),
-            curve: Curves.easeOut,
-            opacity: _isMyPageOpen ? 1 : 0,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: _toggleMyPage,
-              child: Container(
-                color: const Color.fromARGB(255, 0, 0, 0).withOpacity(0.35),
-              ),
-            ),
-          ),
-        ),
-
-        ////////////////////////////////////////////////////////////////
-        /// MY PAGE POPUP
-        ////////////////////////////////////////////////////////////////
-        Positioned(
-          top: 100,
-          right: 24,
-          child: IgnorePointer(
-            ignoring: !_isMyPageOpen,
-            child: AnimatedSlide(
-              duration: const Duration(milliseconds: 260),
-              curve: Curves.easeOutCubic,
-              offset: _isMyPageOpen ? Offset.zero : const Offset(0.10, -0.06),
-              child: AnimatedScale(
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOutCubic,
-                scale: _isMyPageOpen ? 1.0 : 0.96,
-                child: AnimatedOpacity(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOut,
-                  opacity: _isMyPageOpen ? 1 : 0,
-                  child: MyPageCard(
-                    isLoggedIn: _isLoggedIn,
-                    onLogin: () {
-                      updateLogin(true);
-                      _toggleMyPage();
-                    },
-                    onLogout: () {
-                      updateLogin(false);
-                      _toggleMyPage();
-                    },
-                  ),
-                ),
-              ),
-            ),
-          ),
+        _MyPagePopupOverlay(
+          isOpen: _isMyPageOpen,
+          onDismiss: _toggleMyPage,
+          isLoggedIn: _isLoggedIn,
+          onLogin: () {
+            updateLogin(true);
+            _toggleMyPage();
+          },
+          onLogout: () {
+            updateLogin(false);
+            _toggleMyPage();
+          },
         ),
         if (_showLaunchIntro)
           Positioned.fill(
@@ -2942,9 +6133,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                 animation: _launchController,
                 builder: (context, _) {
                   final theme = Theme.of(context);
-                  final isDark = theme.brightness == Brightness.dark;
                   final bg = theme.scaffoldBackgroundColor;
-                  final fg = isDark ? Colors.white : Colors.black;
                   return Opacity(
                     opacity: _launchOpacity.value,
                     child: Container(
@@ -2954,14 +6143,11 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                           position: _launchSlide,
                           child: ScaleTransition(
                             scale: _launchScale,
-                            child: Text(
-                              'LeagueIt',
-                              style: TextStyle(
-                                fontSize: 56,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: -0.8,
-                                color: fg,
-                              ),
+                            child: Image.asset(
+                              'assets/leagueit_logo.png',
+                              width: 130,
+                              height: 130,
+                              fit: BoxFit.contain,
                             ),
                           ),
                         ),
@@ -2976,9 +6162,26 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     );
   }
 
-  void _handleSearch(String query) {
+  _HomeSearchSuggestion? _suggestionForQuery(String query) {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty) return null;
+    for (final suggestion in _playerDirectory) {
+      if (suggestion.name == trimmed) return suggestion;
+    }
+    final qLower = trimmed.toLowerCase();
+    for (final suggestion in _playerDirectory) {
+      if (suggestion.name.toLowerCase().contains(qLower) ||
+          suggestion.meta.club.toLowerCase().contains(qLower)) {
+        return suggestion;
+      }
+    }
+    return null;
+  }
+
+  void _openSearchSuggestion(_HomeSearchSuggestion suggestion) {
+    final query = suggestion.name;
     if (query.isEmpty) return;
-    _clearSuggestions();
+    _resetSearchUi();
     _searchController.clear();
     final ownership =
         _MatchDetailPageState._playerOwnerCache[query] ??
@@ -2986,12 +6189,21 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => PlayerProfilePage(name: query, ownership: ownership),
+        builder: (_) => PlayerProfilePage(
+          name: query,
+          ownership: ownership,
+          metaOverride: suggestion.meta,
+        ),
       ),
     ).then((_) {
-      _searchController.clear();
-      _clearSuggestions();
+      _resetSearchUi();
     });
+  }
+
+  void _handleSearch(String query) {
+    final suggestion = _suggestionForQuery(query);
+    if (suggestion == null) return;
+    _openSearchSuggestion(suggestion);
   }
 
   void _updateSuggestions(String text) {
@@ -3000,15 +6212,33 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
       _clearSuggestions();
       return;
     }
+    _resetSuggestionsScroll();
+    final qLower = q.toLowerCase();
     final matches = _playerDirectory
-        .where((name) => name.toLowerCase().contains(q.toLowerCase()))
+        .where(
+          (entry) =>
+              entry.name.toLowerCase().contains(qLower) ||
+              entry.meta.club.toLowerCase().contains(qLower),
+        )
         .toList();
-    setState(() => _suggestions = matches);
+    setState(() {
+      _suggestions = matches;
+      _suggestionsVisible = matches.isNotEmpty;
+    });
   }
 
   void _clearSuggestions() {
-    if (_suggestions.isEmpty) return;
-    setState(() => _suggestions = []);
+    if (_suggestions.isEmpty && !_suggestionsVisible) return;
+    _resetSuggestionsScroll();
+    setState(() {
+      _suggestionsVisible = false;
+      _suggestions = [];
+    });
+  }
+
+  void _resetSuggestionsScroll() {
+    if (!_suggestionsScrollController.hasClients) return;
+    _suggestionsScrollController.jumpTo(0);
   }
 }
 
@@ -3168,20 +6398,19 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
       );
       if (!mounted) return;
       final raw = data['draftOrder'] as List<dynamic>? ?? const [];
-      final next =
-          raw
-              .whereType<Map>()
-              .map(
-                (item) => _DraftOrderEntry(
-                  uid: '${item['uid'] ?? ''}',
-                  displayName: '${item['displayName'] ?? 'Team'}',
-                  slot: item['slot'] is int
-                      ? item['slot'] as int
-                      : int.tryParse('${item['slot'] ?? 0}') ?? 0,
-                ),
-              )
-              .toList()
-            ..sort((a, b) => a.slot.compareTo(b.slot));
+      final next = raw.whereType<Map>().map((item) {
+        final uid = '${item['uid'] ?? ''}';
+        return _DraftOrderEntry(
+          uid: uid,
+          displayName: _normalizedFantasyDisplayNameForUid(
+            uid,
+            '${item['displayName'] ?? 'Team'}',
+          ),
+          slot: item['slot'] is int
+              ? item['slot'] as int
+              : int.tryParse('${item['slot'] ?? 0}') ?? 0,
+        );
+      }).toList()..sort((a, b) => a.slot.compareTo(b.slot));
       setState(() {
         _memberCount = data['memberCount'] is int
             ? data['memberCount'] as int
@@ -3203,10 +6432,12 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
     if (user == null) return null;
 
     for (final entry in _draftOrder) {
-      if (entry.uid == user.uid) return entry.displayName;
+      if (entry.uid == user.uid) {
+        return _normalizedFantasyDisplayNameForUid(user.uid, entry.displayName);
+      }
     }
 
-    final displayName = user.displayName?.trim() ?? '';
+    final displayName = _currentSignedInFantasyDisplayName();
     if (displayName.isNotEmpty) {
       for (final entry in _draftOrder) {
         if (entry.displayName.trim().toLowerCase() ==
@@ -3215,17 +6446,6 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
         }
       }
       return displayName;
-    }
-
-    final emailPrefix = (user.email ?? '').split('@').first.trim();
-    if (emailPrefix.isNotEmpty) {
-      for (final entry in _draftOrder) {
-        if (entry.displayName.trim().toLowerCase() ==
-            emailPrefix.toLowerCase()) {
-          return entry.displayName;
-        }
-      }
-      return emailPrefix;
     }
 
     return null;
@@ -3498,6 +6718,7 @@ class _DraftDetailPageState extends State<DraftDetailPage> {
                                 teamNames: _draftOrder
                                     .map((entry) => entry.displayName)
                                     .toList(),
+                                myTeamName: _currentUserDraftTeamName(),
                               ),
                             ),
                           );
