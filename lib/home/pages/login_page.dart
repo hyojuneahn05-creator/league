@@ -8,6 +8,11 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  static const IconData _appleLogoIcon = IconData(
+    0xf8ff,
+    fontFamily: 'CupertinoIcons',
+    fontPackage: 'cupertino_icons',
+  );
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _submitting = false;
@@ -377,7 +382,7 @@ class _LoginPageState extends State<LoginPage> {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(
-                              CupertinoIcons.apple_logo,
+                              _appleLogoIcon,
                               size: 20,
                               color: palette.isDark
                                   ? Colors.black
