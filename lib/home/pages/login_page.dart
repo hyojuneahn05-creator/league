@@ -357,23 +357,39 @@ class _LoginPageState extends State<LoginPage> {
                       child: OutlinedButton(
                         onPressed: _submitting ? null : _loginWithApple,
                         style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          backgroundColor: Colors.black,
-                          disabledBackgroundColor: Colors.black26,
-                          side: const BorderSide(color: Colors.black),
+                          foregroundColor: palette.isDark
+                              ? Colors.black
+                              : Colors.white,
+                          backgroundColor: palette.isDark
+                              ? Colors.white
+                              : Colors.black,
+                          disabledBackgroundColor: palette.isDark
+                              ? Colors.white54
+                              : Colors.black26,
+                          side: BorderSide(
+                            color: palette.isDark ? Colors.white : Colors.black,
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(20),
                           ),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(CupertinoIcons.logo_apple, size: 20),
-                            SizedBox(width: 12),
+                            Icon(
+                              CupertinoIcons.apple_logo,
+                              size: 20,
+                              color: palette.isDark
+                                  ? Colors.black
+                                  : Colors.white,
+                            ),
+                            const SizedBox(width: 12),
                             Text(
                               'Apple로 로그인',
                               style: TextStyle(
-                                color: Colors.white,
+                                color: palette.isDark
+                                    ? Colors.black
+                                    : Colors.white,
                                 fontSize: 16,
                                 fontWeight: FontWeight.w600,
                               ),
