@@ -108,7 +108,25 @@ Future<String?> _readLocalStateCache(String key) async {
 
 Future<void> _writeLocalStateCache(String key, String value) async {
   final file = await _localStateCacheFile(key);
-  await file.writeAsString(value, flush: true);
+  final tempFile = File('${file.path}.tmp');
+  await tempFile.writeAsString(value, flush: true);
+  await tempFile.rename(file.path);
+}
+
+Future<void> _deleteLocalStateCache(String key) async {
+  try {
+    final file = await _localStateCacheFile(key);
+    if (await file.exists()) {
+      await file.delete();
+    }
+    final tempFile = File('${file.path}.tmp');
+    if (await tempFile.exists()) {
+      await tempFile.delete();
+    }
+  } catch (error, stackTrace) {
+    debugPrint('Local state cache delete failed ($key): $error');
+    debugPrint('$stackTrace');
+  }
 }
 
 Future<String?> _readLocalStateCacheWithLegacySecureStorage({
