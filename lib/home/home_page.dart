@@ -1947,6 +1947,7 @@ int _mappedKLeagueRoundForFantasyRound(
 }
 
 const Duration _fantasySoccerScoreCacheTtl = Duration(seconds: 20);
+const Duration _fantasySoccerRefreshThrottle = Duration(minutes: 5);
 
 class _FantasySoccerRoundScoreSnapshot {
   final String leagueId;
@@ -4516,7 +4517,9 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
   List<_JoinedDraft> _joinedDrafts = const [];
   final Set<String> _recoveringFantasyLeagueIds = <String>{};
   final Set<String> _cancelingUnfilledLeagueIds = <String>{};
-  bool _isRefreshingFantasySoccerScores = false;
+  Future<void>? _fantasySoccerScoresRefreshFuture;
+  DateTime? _lastFantasySoccerScoresRefreshAt;
+  bool _lastFantasySoccerScoresRefreshIncludedHistory = false;
   AppLinks? _appLinks;
   StreamSubscription<Uri>? _incomingLeagueLinkSub;
   String? _pendingInviteCodeFromLink;
@@ -4960,7 +4963,19 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     bool includeHistory = false,
     bool forceRefreshLiveData = false,
   }) async {
-    if (_isRefreshingFantasySoccerScores) return;
+    final now = DateTime.now();
+    final inFlight = _fantasySoccerScoresRefreshFuture;
+    if (inFlight != null) {
+      return inFlight;
+    }
+    final lastRefreshAt = _lastFantasySoccerScoresRefreshAt;
+    final isThrottled =
+        lastRefreshAt != null &&
+        now.difference(lastRefreshAt) < _fantasySoccerRefreshThrottle;
+    if (isThrottled &&
+        (!includeHistory || _lastFantasySoccerScoresRefreshIncludedHistory)) {
+      return;
+    }
     final soccerDrafts = _joinedDrafts
         .where(
           (draft) =>
@@ -4972,34 +4987,40 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
         .toList();
     if (soccerDrafts.isEmpty) return;
 
-    _isRefreshingFantasySoccerScores = true;
-    try {
-      if (forceRefreshLiveData) {
-        await _loadCachedKLeagueLeagueData(forceRefresh: true);
-      }
-      for (final draft in soccerDrafts) {
-        final currentRound = _currentFantasyRoundAt(draft, DateTime.now());
-        final rounds = includeHistory
-            ? <int>[for (int round = 1; round <= currentRound; round++) round]
-            : <int>[currentRound];
-        for (final round in rounds) {
-          await _ensureFantasySoccerRoundScoreSnapshot(
-            draft,
-            round,
-            force: round == currentRound,
-            forceRefreshLiveData: forceRefreshLiveData && round == currentRound,
-          );
+    final future = () async {
+      try {
+        if (forceRefreshLiveData) {
+          await _loadCachedKLeagueLeagueData(forceRefresh: true);
         }
+        for (final draft in soccerDrafts) {
+          final currentRound = _currentFantasyRoundAt(draft, DateTime.now());
+          final rounds = includeHistory
+              ? <int>[for (int round = 1; round <= currentRound; round++) round]
+              : <int>[currentRound];
+          for (final round in rounds) {
+            await _ensureFantasySoccerRoundScoreSnapshot(
+              draft,
+              round,
+              force: round == currentRound,
+              forceRefreshLiveData:
+                  forceRefreshLiveData && round == currentRound,
+            );
+          }
+        }
+        _lastFantasySoccerScoresRefreshAt = DateTime.now();
+        _lastFantasySoccerScoresRefreshIncludedHistory = includeHistory;
+        unawaited(_persistFantasySoccerRoundScoreCache());
+        if (!mounted) return;
+        setState(() {});
+      } catch (e, st) {
+        debugPrint('refreshFantasySoccerScores failed: $e');
+        debugPrint('$st');
+      } finally {
+        _fantasySoccerScoresRefreshFuture = null;
       }
-      unawaited(_persistFantasySoccerRoundScoreCache());
-      if (!mounted) return;
-      setState(() {});
-    } catch (e, st) {
-      debugPrint('refreshFantasySoccerScores failed: $e');
-      debugPrint('$st');
-    } finally {
-      _isRefreshingFantasySoccerScores = false;
-    }
+    }();
+    _fantasySoccerScoresRefreshFuture = future;
+    return future;
   }
 
   String _userStateKey(String key) {

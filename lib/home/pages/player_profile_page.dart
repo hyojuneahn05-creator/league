@@ -56,6 +56,8 @@ final Map<String, Future<double?>> _cachedKboPlayerAptsFutures =
 final Map<String, double?> _cachedKboPlayerApts = <String, double?>{};
 final Map<String, Future<Map<String, dynamic>>> _cachedKboMatchDetails =
     <String, Future<Map<String, dynamic>>>{};
+final Map<int, Future<Map<String, dynamic>>> _inFlightKboMatchDetailsByMatchId =
+    <int, Future<Map<String, dynamic>>>{};
 final Map<String, DateTime> _cachedKboMatchDetailFailureTimestamps =
     <String, DateTime>{};
 final Map<String, String> _cachedKboMatchDetailFailureMessages =
@@ -804,6 +806,7 @@ Future<Map<String, dynamic>> _loadCachedKboMatchDetail(
   final cacheKey = _kboMatchDetailCacheKey(matchId, fantasyRound: fantasyRound);
   final now = DateTime.now();
   final inFlight = _cachedKboMatchDetails[cacheKey];
+  final inFlightByMatchId = _inFlightKboMatchDetailsByMatchId[matchId];
   final cachedAt = _cachedKboMatchDetailsUpdatedAt[cacheKey];
   final isStale =
       cachedAt == null || now.difference(cachedAt) > _kboProfileCacheTtl;
@@ -829,6 +832,11 @@ Future<Map<String, dynamic>> _loadCachedKboMatchDetail(
     if (!isStale && now.difference(cachedAt) < const Duration(seconds: 4)) {
       return inFlight;
     }
+  }
+  if (inFlightByMatchId != null) {
+    _cachedKboMatchDetails[cacheKey] = inFlightByMatchId;
+    _cachedKboMatchDetailsUpdatedAt.putIfAbsent(cacheKey, () => now);
+    return inFlightByMatchId;
   }
 
   final persisted = await _restorePersistedKboMatchDetail(
@@ -887,8 +895,12 @@ Future<Map<String, dynamic>> _loadCachedKboMatchDetail(
             _cachedKboMatchDetailFailureTimestamps[cacheKey] = DateTime.now();
             _cachedKboMatchDetailFailureMessages[cacheKey] = '$error';
             throw error;
+          })
+          .whenComplete(() {
+            _inFlightKboMatchDetailsByMatchId.remove(matchId);
           });
   _cachedKboMatchDetails[cacheKey] = future;
+  _inFlightKboMatchDetailsByMatchId[matchId] = future;
   _cachedKboMatchDetailsUpdatedAt[cacheKey] = now;
   return future;
 }
