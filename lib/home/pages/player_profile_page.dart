@@ -13,6 +13,7 @@ const FlutterSecureStorage _leagueDataCacheStorage = FlutterSecureStorage(
 );
 const String _kLeagueLeagueDataCacheKey = 'kleague.league_data.v1';
 const String _kboLeagueDataCacheKey = 'kbo.league_data.v1';
+const Duration _leagueDataMemoryCacheTtl = Duration(minutes: 5);
 const Duration _leagueDataPrimeCacheTtl = Duration(minutes: 30);
 final Map<int, Future<Map<String, dynamic>>> _cachedKLeagueFixtureDetails =
     <int, Future<Map<String, dynamic>>>{};
@@ -1066,20 +1067,35 @@ bool _kboPlayerStatMatchesProfile(
 Future<Map<String, dynamic>> _loadCachedKLeagueLeagueData({
   bool forceRefresh = false,
 }) {
+  final now = DateTime.now();
   final cachedData = _cachedKLeagueLeagueData;
+  final cachedAt = _cachedKLeagueLeagueDataUpdatedAt;
   final inFlight = _cachedKLeagueLeagueDataFuture;
-  if (!forceRefresh) {
-    if (cachedData != null) return Future.value(cachedData);
-    if (inFlight != null) return inFlight;
-  } else if (inFlight != null) {
+  if (cachedData != null && _isLeagueDataMemoryCacheFresh(cachedAt, now: now)) {
+    return Future.value(cachedData);
+  }
+  if (inFlight != null) {
     return inFlight;
   }
   final future =
       () async {
+        final restored = await _restoreLeagueDataCacheEntry(
+          _kLeagueLeagueDataCacheKey,
+        );
+        if (restored != null &&
+            _isLeagueDataMemoryCacheFresh(restored.updatedAt, now: now)) {
+          _cachedKLeagueLeagueData = restored.data;
+          _cachedKLeagueLeagueDataUpdatedAt = restored.updatedAt ?? now;
+          return restored.data;
+        }
+        if (!forceRefresh && cachedData != null) {
+          return cachedData;
+        }
         try {
           final value = await ApiService.fetchLeagueData();
+          final fetchedAt = DateTime.now();
           _cachedKLeagueLeagueData = value;
-          _cachedKLeagueLeagueDataUpdatedAt = DateTime.now();
+          _cachedKLeagueLeagueDataUpdatedAt = fetchedAt;
           unawaited(_persistLeagueDataCache(_kLeagueLeagueDataCacheKey, value));
           return value;
         } catch (error, stackTrace) {
@@ -1088,9 +1104,6 @@ Future<Map<String, dynamic>> _loadCachedKLeagueLeagueData({
           if (cachedData != null) {
             return cachedData;
           }
-          final restored = await _restoreLeagueDataCacheEntry(
-            _kLeagueLeagueDataCacheKey,
-          );
           if (restored != null) {
             _cachedKLeagueLeagueData = restored.data;
             _cachedKLeagueLeagueDataUpdatedAt = restored.updatedAt;
@@ -1098,7 +1111,7 @@ Future<Map<String, dynamic>> _loadCachedKLeagueLeagueData({
           }
           final fallback = _emptyKLeagueLeagueData();
           _cachedKLeagueLeagueData = fallback;
-          _cachedKLeagueLeagueDataUpdatedAt = DateTime.now();
+          _cachedKLeagueLeagueDataUpdatedAt = null;
           return fallback;
         }
       }().whenComplete(() {
@@ -1111,20 +1124,35 @@ Future<Map<String, dynamic>> _loadCachedKLeagueLeagueData({
 Future<Map<String, dynamic>> _loadCachedKboLeagueData({
   bool forceRefresh = false,
 }) {
+  final now = DateTime.now();
   final cachedData = _cachedKboLeagueData;
+  final cachedAt = _cachedKboLeagueDataUpdatedAt;
   final inFlight = _cachedKboLeagueDataFuture;
-  if (!forceRefresh) {
-    if (cachedData != null) return Future.value(cachedData);
-    if (inFlight != null) return inFlight;
-  } else if (inFlight != null) {
+  if (cachedData != null && _isLeagueDataMemoryCacheFresh(cachedAt, now: now)) {
+    return Future.value(cachedData);
+  }
+  if (inFlight != null) {
     return inFlight;
   }
   final future =
       () async {
+        final restored = await _restoreLeagueDataCacheEntry(
+          _kboLeagueDataCacheKey,
+        );
+        if (restored != null &&
+            _isLeagueDataMemoryCacheFresh(restored.updatedAt, now: now)) {
+          _cachedKboLeagueData = restored.data;
+          _cachedKboLeagueDataUpdatedAt = restored.updatedAt ?? now;
+          return restored.data;
+        }
+        if (!forceRefresh && cachedData != null) {
+          return cachedData;
+        }
         try {
           final value = await ApiService.fetchKboLeagueData();
+          final fetchedAt = DateTime.now();
           _cachedKboLeagueData = value;
-          _cachedKboLeagueDataUpdatedAt = DateTime.now();
+          _cachedKboLeagueDataUpdatedAt = fetchedAt;
           unawaited(_persistLeagueDataCache(_kboLeagueDataCacheKey, value));
           return value;
         } catch (error, stackTrace) {
@@ -1133,9 +1161,6 @@ Future<Map<String, dynamic>> _loadCachedKboLeagueData({
           if (cachedData != null) {
             return cachedData;
           }
-          final restored = await _restoreLeagueDataCacheEntry(
-            _kboLeagueDataCacheKey,
-          );
           if (restored != null) {
             _cachedKboLeagueData = restored.data;
             _cachedKboLeagueDataUpdatedAt = restored.updatedAt;
@@ -1143,7 +1168,7 @@ Future<Map<String, dynamic>> _loadCachedKboLeagueData({
           }
           final fallback = _emptyKboLeagueData();
           _cachedKboLeagueData = fallback;
-          _cachedKboLeagueDataUpdatedAt = DateTime.now();
+          _cachedKboLeagueDataUpdatedAt = null;
           return fallback;
         }
       }().whenComplete(() {
@@ -1223,6 +1248,12 @@ bool _isLeagueDataCacheFresh(DateTime? updatedAt, {DateTime? now}) {
   if (updatedAt == null) return false;
   return (now ?? DateTime.now()).difference(updatedAt) <=
       _leagueDataPrimeCacheTtl;
+}
+
+bool _isLeagueDataMemoryCacheFresh(DateTime? updatedAt, {DateTime? now}) {
+  if (updatedAt == null) return false;
+  return (now ?? DateTime.now()).difference(updatedAt) <=
+      _leagueDataMemoryCacheTtl;
 }
 
 Future<Map<String, dynamic>> _loadCachedKLeagueFixtureDetail(
