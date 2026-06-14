@@ -15,10 +15,16 @@ const String _kLeagueLeagueDataCacheKey = 'kleague.league_data.v1';
 const String _kboLeagueDataCacheKey = 'kbo.league_data.v1';
 const Duration _leagueDataMemoryCacheTtl = Duration(minutes: 5);
 const Duration _leagueDataPrimeCacheTtl = Duration(minutes: 30);
+const int _kLeagueFixtureDetailConcurrencyLimit = 2;
+const String _kLeagueFixtureDetailStorageKeyPrefix =
+    'kleague.fixture_detail.v1';
 final Map<int, Future<Map<String, dynamic>>> _cachedKLeagueFixtureDetails =
     <int, Future<Map<String, dynamic>>>{};
 final Map<int, DateTime> _cachedKLeagueFixtureDetailsUpdatedAt =
     <int, DateTime>{};
+int _activeKLeagueFixtureDetailRequests = 0;
+final Queue<Completer<void>> _pendingKLeagueFixtureDetailRequestSlots =
+    Queue<Completer<void>>();
 final Map<String, Future<double?>> _cachedKLeaguePlayerAptsFutures =
     <String, Future<double?>>{};
 final Map<String, double?> _cachedKLeaguePlayerApts = <String, double?>{};
@@ -84,6 +90,29 @@ Future<T> _runKboMatchDetailRequestLimited<T>(
     _activeKboMatchDetailRequests = max(0, _activeKboMatchDetailRequests - 1);
     if (_pendingKboMatchDetailRequestSlots.isNotEmpty) {
       _pendingKboMatchDetailRequestSlots.removeFirst().complete();
+    }
+  }
+}
+
+Future<T> _runKLeagueFixtureDetailRequestLimited<T>(
+  Future<T> Function() action,
+) async {
+  if (_activeKLeagueFixtureDetailRequests >=
+      _kLeagueFixtureDetailConcurrencyLimit) {
+    final waiter = Completer<void>();
+    _pendingKLeagueFixtureDetailRequestSlots.addLast(waiter);
+    await waiter.future;
+  }
+  _activeKLeagueFixtureDetailRequests += 1;
+  try {
+    return await action();
+  } finally {
+    _activeKLeagueFixtureDetailRequests = max(
+      0,
+      _activeKLeagueFixtureDetailRequests - 1,
+    );
+    if (_pendingKLeagueFixtureDetailRequestSlots.isNotEmpty) {
+      _pendingKLeagueFixtureDetailRequestSlots.removeFirst().complete();
     }
   }
 }
@@ -1256,6 +1285,56 @@ bool _isLeagueDataMemoryCacheFresh(DateTime? updatedAt, {DateTime? now}) {
       _leagueDataMemoryCacheTtl;
 }
 
+String _kLeagueFixtureDetailDiskCacheKey(int fixtureId) {
+  return '$_kLeagueFixtureDetailStorageKeyPrefix.$fixtureId';
+}
+
+Future<({Map<String, dynamic> detail, DateTime updatedAt})?>
+_restorePersistedKLeagueFixtureDetail(int fixtureId) async {
+  try {
+    final raw = await _readLocalStateCache(
+      _kLeagueFixtureDetailDiskCacheKey(fixtureId),
+    );
+    if (raw == null || raw.trim().isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic>) return null;
+    final detail = _fixtureAsMap(decoded['detail']);
+    if (detail.isEmpty) return null;
+    final updatedAt =
+        DateTime.tryParse('${decoded['updatedAt'] ?? ''}') ?? DateTime(1970);
+    return (detail: detail, updatedAt: updatedAt);
+  } catch (error, stackTrace) {
+    debugPrint('restorePersistedKLeagueFixtureDetail failed: $error');
+    debugPrint('$stackTrace');
+    return null;
+  }
+}
+
+Future<void> _persistKLeagueFixtureDetail(
+  int fixtureId,
+  Map<String, dynamic> detail,
+) async {
+  try {
+    await _writeLocalStateCache(
+      _kLeagueFixtureDetailDiskCacheKey(fixtureId),
+      jsonEncode(<String, dynamic>{
+        'updatedAt': DateTime.now().toIso8601String(),
+        'detail': detail,
+      }),
+    );
+  } catch (error, stackTrace) {
+    debugPrint('persistKLeagueFixtureDetail failed: $error');
+    debugPrint('$stackTrace');
+  }
+}
+
+bool _isKLeagueFixtureDetailFinal(Map<String, dynamic> detail) {
+  final detailFixture = _fixtureAsMap(detail['fixture']);
+  final fixtureMeta = _fixtureAsMap(detailFixture['fixture']);
+  final status = _fixtureAsMap(fixtureMeta['status']);
+  return _isKLeagueFinalStatus(_fixtureText(status['short']));
+}
+
 Future<Map<String, dynamic>> _loadCachedKLeagueFixtureDetail(
   int fixtureId, {
   bool forceRefresh = false,
@@ -1267,38 +1346,56 @@ Future<Map<String, dynamic>> _loadCachedKLeagueFixtureDetail(
 
   final cached = _cachedKLeagueFixtureDetails[fixtureId];
   final cachedAt = _cachedKLeagueFixtureDetailsUpdatedAt[fixtureId];
-  final isStale =
-      cachedAt == null ||
-      DateTime.now().difference(cachedAt) > _kLeagueProfileCacheTtl;
-  if (cached != null && !isStale) {
+  if (cached != null) {
     try {
       final detail = await cached;
-      if (!_kLeagueFixtureDetailNeedsRefresh(detail)) {
+      if (_isKLeagueFixtureDetailFinal(detail)) return detail;
+      if (cachedAt != null &&
+          DateTime.now().difference(cachedAt) <= _kLeagueProfileCacheTtl) {
         return detail;
       }
     } catch (_) {
       // Fall through to a fresh fetch below.
     }
   }
-  if (cached != null) {
-    _cachedKLeagueFixtureDetails.remove(fixtureId);
-    _cachedKLeagueFixtureDetailsUpdatedAt.remove(fixtureId);
+
+  final restored = await _restorePersistedKLeagueFixtureDetail(fixtureId);
+  if (restored != null) {
+    final future = Future<Map<String, dynamic>>.value(restored.detail);
+    _cachedKLeagueFixtureDetails[fixtureId] = future;
+    _cachedKLeagueFixtureDetailsUpdatedAt[fixtureId] = restored.updatedAt;
+    return restored.detail;
   }
 
-  final future = ApiService.fetchFixtureDetails(fixtureId).catchError((error) {
-    _cachedKLeagueFixtureDetails.remove(fixtureId);
-    _cachedKLeagueFixtureDetailsUpdatedAt.remove(fixtureId);
-    throw error;
-  });
+  _cachedKLeagueFixtureDetails.remove(fixtureId);
+  _cachedKLeagueFixtureDetailsUpdatedAt.remove(fixtureId);
+
+  final future =
+      _runKLeagueFixtureDetailRequestLimited(() async {
+        final detail = await ApiService.fetchFixtureDetails(fixtureId);
+        _cachedKLeagueFixtureDetailsUpdatedAt[fixtureId] = DateTime.now();
+        unawaited(_persistKLeagueFixtureDetail(fixtureId, detail));
+        return detail;
+      }).catchError((error) {
+        _cachedKLeagueFixtureDetails.remove(fixtureId);
+        _cachedKLeagueFixtureDetailsUpdatedAt.remove(fixtureId);
+        throw error;
+      });
   _cachedKLeagueFixtureDetails[fixtureId] = future;
   _cachedKLeagueFixtureDetailsUpdatedAt[fixtureId] = DateTime.now();
-  final detail = await future;
-  if (!forceRefresh && _kLeagueFixtureDetailNeedsRefresh(detail)) {
-    _cachedKLeagueFixtureDetails.remove(fixtureId);
-    _cachedKLeagueFixtureDetailsUpdatedAt.remove(fixtureId);
-    return _loadCachedKLeagueFixtureDetail(fixtureId, forceRefresh: true);
+  try {
+    return await future;
+  } catch (error) {
+    if (cached != null) {
+      try {
+        return await cached;
+      } catch (_) {}
+    }
+    if (restored != null) {
+      return restored.detail;
+    }
+    rethrow;
   }
-  return detail;
 }
 
 bool _kLeagueFixtureMapHasStarted(
@@ -1315,28 +1412,6 @@ bool _kLeagueFixtureMapHasStarted(
         _fixtureText(status['elapsed']),
         _fixtureText(status['extra']),
       ).isNotEmpty;
-}
-
-bool _kLeagueFixtureDetailNeedsRefresh(Map<String, dynamic> detail) {
-  final detailFixture = _fixtureAsMap(detail['fixture']);
-  final fixtureMeta = _fixtureAsMap(detailFixture['fixture']);
-  final kickoff = DateTime.tryParse(_fixtureText(fixtureMeta['date']));
-  final status = _fixtureAsMap(fixtureMeta['status']);
-  final started =
-      (kickoff != null && !kickoff.isAfter(DateTime.now())) ||
-      _isKLeagueFinalStatus(_fixtureText(status['short'])) ||
-      _fixtureMinuteLabel(
-        _fixtureText(status['elapsed']),
-        _fixtureText(status['extra']),
-      ).isNotEmpty;
-  if (!started) return false;
-
-  final lineups = _fixtureAsList(detail['lineups']);
-  final players = _fixtureAsList(detail['players']);
-  if (_isKLeagueFinalStatus(_fixtureText(status['short']))) {
-    return lineups.isEmpty || players.isEmpty;
-  }
-  return lineups.isEmpty && players.isEmpty;
 }
 
 double? _kLeagueAptsFromRoundPoints(Iterable<_PlayerRoundPoints> roundPoints) {
