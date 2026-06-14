@@ -59,7 +59,8 @@ final Map<String, DateTime> _loggedKboMatchDetailFailuresAt =
 const Duration _kboProfileCacheTtl = Duration(minutes: 5);
 const Duration _kboMatchDetailFailureCooldown = Duration(seconds: 30);
 const Duration _kboMatchDetailLogCooldown = Duration(seconds: 30);
-const int _kboMatchDetailConcurrencyLimit = 3;
+const int _kboMatchDetailConcurrencyLimit = 2;
+const String _kboMatchDetailStorageKeyPrefix = 'kbo.match_detail.v1';
 int _activeKboMatchDetailRequests = 0;
 final Queue<Completer<void>> _pendingKboMatchDetailRequestSlots =
     Queue<Completer<void>>();
@@ -315,6 +316,7 @@ Future<void> _restorePersistedKLeaguePlayerRoundPointsCache() {
           for (final entry in entries.entries) {
             final payload = _fixtureAsMap(entry.value);
             final isSoccer = payload['isSoccer'] != false;
+            final hasFullSeason = isSoccer || payload['hasFullSeason'] == true;
             final updatedAt = DateTime.tryParse(
               '${payload['updatedAt'] ?? ''}',
             );
@@ -340,6 +342,7 @@ Future<void> _restorePersistedKLeaguePlayerRoundPointsCache() {
             _persistedKLeaguePlayerRoundPointsEntries[entry.key] =
                 _PersistedPlayerRoundPointsEntry(
                   isSoccer: isSoccer,
+                  hasFullSeason: hasFullSeason,
                   updatedAt: updatedAt,
                   roundPoints: roundPoints,
                 );
@@ -357,11 +360,14 @@ Future<void> _restorePersistedKLeaguePlayerRoundPointsCache() {
               }
             } else {
               _cachedKboPlayerRoundPoints[entry.key] = roundPoints;
-              _cachedKboPlayerRoundPointsHasFullSeason[entry.key] = true;
+              _cachedKboPlayerRoundPointsHasFullSeason[entry.key] =
+                  hasFullSeason;
               _cachedKboPlayerRoundPointsUpdatedAt[entry.key] = updatedAt;
-              _cachedKboPlayerApts[entry.key] = _kLeagueAptsFromRoundPoints(
-                roundPoints,
-              );
+              if (hasFullSeason) {
+                _cachedKboPlayerApts[entry.key] = _kLeagueAptsFromRoundPoints(
+                  roundPoints,
+                );
+              }
             }
           }
           _didHydratePersistedPlayerRoundPointsCache = true;
@@ -391,6 +397,7 @@ Future<void> _persistKLeaguePlayerRoundPointsCache() async {
         for (final entry in limitedEntries)
           entry.key: <String, dynamic>{
             'isSoccer': entry.value.isSoccer,
+            'hasFullSeason': entry.value.hasFullSeason,
             'updatedAt': entry.value.updatedAt.toIso8601String(),
             'roundPoints': entry.value.roundPoints
                 .map(_playerRoundPointsToJson)
@@ -672,6 +679,76 @@ String _kboMatchDetailCacheKey(int matchId, {int? fantasyRound}) {
   return 'v2|$matchId|$round';
 }
 
+String _kboMatchDetailDiskCacheKey(int matchId, {int? fantasyRound}) {
+  return '$_kboMatchDetailStorageKeyPrefix.${_kboMatchDetailCacheKey(matchId, fantasyRound: fantasyRound)}';
+}
+
+bool _isHistoricalKboFantasyRound(int round, {DateTime? now}) {
+  if (round <= 0) return false;
+  return round < _latestStartedKboFantasyRound(now ?? DateTime.now());
+}
+
+Future<({Map<String, dynamic> detail, DateTime updatedAt})?>
+_restorePersistedKboMatchDetail(int matchId, {int? fantasyRound}) async {
+  try {
+    final raw = await _readLocalStateCache(
+      _kboMatchDetailDiskCacheKey(matchId, fantasyRound: fantasyRound),
+    );
+    if (raw == null || raw.trim().isEmpty) return null;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic>) return null;
+    final detail = _fixtureAsMap(decoded['detail']);
+    if (detail.isEmpty) return null;
+    final updatedAt =
+        DateTime.tryParse('${decoded['updatedAt'] ?? ''}') ?? DateTime(1970);
+    return (detail: detail, updatedAt: updatedAt);
+  } catch (error, stackTrace) {
+    debugPrint('restorePersistedKboMatchDetail failed: $error');
+    debugPrint('$stackTrace');
+    return null;
+  }
+}
+
+Future<void> _persistKboMatchDetail(
+  int matchId,
+  Map<String, dynamic> detail, {
+  int? fantasyRound,
+}) async {
+  try {
+    await _writeLocalStateCache(
+      _kboMatchDetailDiskCacheKey(matchId, fantasyRound: fantasyRound),
+      jsonEncode(<String, dynamic>{
+        'updatedAt': DateTime.now().toIso8601String(),
+        'detail': detail,
+      }),
+    );
+  } catch (error, stackTrace) {
+    debugPrint('persistKboMatchDetail failed: $error');
+    debugPrint('$stackTrace');
+  }
+}
+
+bool _shouldUseCachedKboMatchDetail(
+  Map<String, dynamic> detail, {
+  required DateTime cachedAt,
+  bool forceRefresh = false,
+  int? fantasyRound,
+  DateTime? now,
+}) {
+  final current = now ?? DateTime.now();
+  if (fantasyRound != null &&
+      _isHistoricalKboFantasyRound(fantasyRound, now: current)) {
+    return true;
+  }
+  if (_isKboTerminalStatus('${detail['status'] ?? ''}')) {
+    return true;
+  }
+  if (!forceRefresh && current.difference(cachedAt) <= _kboProfileCacheTtl) {
+    return true;
+  }
+  return false;
+}
+
 Map<int, int> _kboFrozenCancelledMatchOriginalRounds(
   Map<String, dynamic>? leagueData,
 ) {
@@ -690,27 +767,61 @@ Future<Map<String, dynamic>> _loadCachedKboMatchDetail(
   int matchId, {
   bool forceRefresh = false,
   int? fantasyRound,
-}) {
+}) async {
   final cacheKey = _kboMatchDetailCacheKey(matchId, fantasyRound: fantasyRound);
   final now = DateTime.now();
+  final inFlight = _cachedKboMatchDetails[cacheKey];
+  final cachedAt = _cachedKboMatchDetailsUpdatedAt[cacheKey];
+  final isStale =
+      cachedAt == null || now.difference(cachedAt) > _kboProfileCacheTtl;
+  if (inFlight != null) {
+    if (cachedAt != null) {
+      try {
+        final detail = await inFlight;
+        if (_shouldUseCachedKboMatchDetail(
+          detail,
+          cachedAt: cachedAt,
+          forceRefresh: forceRefresh,
+          fantasyRound: fantasyRound,
+          now: now,
+        )) {
+          return detail;
+        }
+      } catch (_) {
+        // Fall through to persisted/network fetch below.
+      }
+    } else if (!forceRefresh && !isStale) {
+      return inFlight;
+    }
+    if (!isStale && now.difference(cachedAt) < const Duration(seconds: 4)) {
+      return inFlight;
+    }
+  }
+
+  final persisted = await _restorePersistedKboMatchDetail(
+    matchId,
+    fantasyRound: fantasyRound,
+  );
+  if (persisted != null &&
+      _shouldUseCachedKboMatchDetail(
+        persisted.detail,
+        cachedAt: persisted.updatedAt,
+        forceRefresh: forceRefresh,
+        fantasyRound: fantasyRound,
+        now: now,
+      )) {
+    final future = Future<Map<String, dynamic>>.value(persisted.detail);
+    _cachedKboMatchDetails[cacheKey] = future;
+    _cachedKboMatchDetailsUpdatedAt[cacheKey] = persisted.updatedAt;
+    return future;
+  }
+
   final failedAt = _cachedKboMatchDetailFailureTimestamps[cacheKey];
   if (failedAt != null &&
       now.difference(failedAt) < _kboMatchDetailFailureCooldown) {
     final cachedMessage =
         _cachedKboMatchDetailFailureMessages[cacheKey] ?? 'Request failed';
     return Future<Map<String, dynamic>>.error(Exception(cachedMessage));
-  }
-  final inFlight = _cachedKboMatchDetails[cacheKey];
-  final cachedAt = _cachedKboMatchDetailsUpdatedAt[cacheKey];
-  final isStale =
-      cachedAt == null || now.difference(cachedAt) > _kboProfileCacheTtl;
-  if (inFlight != null) {
-    if (!forceRefresh && !isStale) return inFlight;
-    if (forceRefresh &&
-        cachedAt != null &&
-        now.difference(cachedAt) < const Duration(seconds: 4)) {
-      return inFlight;
-    }
   }
   if (forceRefresh || isStale) {
     _cachedKboMatchDetails.remove(cacheKey);
@@ -728,6 +839,13 @@ Future<Map<String, dynamic>> _loadCachedKboMatchDetail(
           .then((detail) {
             _cachedKboMatchDetailFailureTimestamps.remove(cacheKey);
             _cachedKboMatchDetailFailureMessages.remove(cacheKey);
+            unawaited(
+              _persistKboMatchDetail(
+                matchId,
+                detail,
+                fantasyRound: fantasyRound,
+              ),
+            );
             return detail;
           })
           .catchError((error) {
@@ -1490,6 +1608,7 @@ Future<List<_PlayerRoundPoints>> _loadKLeagueRoundPointsForPlayerShared({
         _persistedKLeaguePlayerRoundPointsEntries[playerCacheKey] =
             _PersistedPlayerRoundPointsEntry(
               isSoccer: true,
+              hasFullSeason: true,
               updatedAt: DateTime.now(),
               roundPoints: result,
             );
@@ -1600,13 +1719,18 @@ Future<List<_PlayerRoundPoints>> _loadKboRoundPointsForPlayerShared({
         final previousResult = restored ?? cached;
         final previousHasFullSeason =
             restoredHasFullSeason || cachedHasFullSeason;
+        final now = DateTime.now();
+        final currentStartedRound = _latestStartedKboFantasyRound(now);
+        final previousByRound = <int, _PlayerRoundPoints>{
+          for (final entry in previousResult ?? const <_PlayerRoundPoints>[])
+            entry.round: entry,
+        };
         final leagueData = await _loadCachedKboLeagueData(
           forceRefresh: forceRefresh,
         );
         final rawMatches = _fixtureAsList(leagueData['matches']);
         final frozenCancelledOriginalRounds =
             _kboFrozenCancelledMatchOriginalRounds(leagueData);
-        final now = DateTime.now();
 
         int latestRound = 0;
         final opponentByRound = <int, String>{};
@@ -1655,6 +1779,12 @@ Future<List<_PlayerRoundPoints>> _loadKboRoundPointsForPlayerShared({
           }
           if (effectiveRound > latestRound) latestRound = effectiveRound;
           if (matchId == null || matchId <= 0) continue;
+          final hasCachedRound = previousByRound[effectiveRound] != null;
+          final isHistoricalRound =
+              effectiveRound > 0 && effectiveRound < currentStartedRound;
+          if (isHistoricalRound && hasCachedRound) {
+            continue;
+          }
           relevantMatches.add((
             round: effectiveRound,
             matchId: matchId,
@@ -1665,15 +1795,12 @@ Future<List<_PlayerRoundPoints>> _loadKboRoundPointsForPlayerShared({
         if (latestRound <= 0) return const <_PlayerRoundPoints>[];
 
         final rounds = <int, _KLeaguePlayerRoundAccumulator>{};
-        final previousByRound = <int, _PlayerRoundPoints>{
-          for (final entry in previousResult ?? const <_PlayerRoundPoints>[])
-            if (normalizedTargetRounds != null
-                ? normalizedTargetRounds.contains(entry.round)
-                : entry.round <= latestRound)
-              entry.round: entry,
-        };
         final roundsToBuild = <int>{
-          ...previousByRound.keys,
+          for (final entry in previousByRound.entries)
+            if (normalizedTargetRounds != null
+                ? normalizedTargetRounds.contains(entry.key)
+                : entry.key <= latestRound)
+              entry.key,
           ...opponentByRound.keys,
         };
         if (normalizedTargetRounds == null) {
@@ -1695,7 +1822,11 @@ Future<List<_PlayerRoundPoints>> _loadKboRoundPointsForPlayerShared({
         resolveMatchRoundScore(
           ({int round, int matchId, String opponentLabel}) matchInfo,
         ) async {
-          final refreshAttempts = forceRefresh
+          final isHistoricalRound =
+              matchInfo.round > 0 && matchInfo.round < currentStartedRound;
+          final refreshAttempts = isHistoricalRound
+              ? const <bool>[false]
+              : forceRefresh
               ? const <bool>[true]
               : const <bool>[false, true];
           for (final attemptForceRefresh in refreshAttempts) {
@@ -1815,11 +1946,13 @@ Future<List<_PlayerRoundPoints>> _loadKboRoundPointsForPlayerShared({
                 base: previousResult,
                 updates: result,
               );
+        final hasFullSeason =
+            normalizedTargetRounds == null || previousHasFullSeason;
         _cachedKboPlayerRoundPoints[playerCacheKey] = mergedResult;
         _cachedKboPlayerRoundPointsHasFullSeason[playerCacheKey] =
-            normalizedTargetRounds == null || previousHasFullSeason;
+            hasFullSeason;
         _cachedKboPlayerRoundPointsUpdatedAt[playerCacheKey] = DateTime.now();
-        if (normalizedTargetRounds == null) {
+        if (hasFullSeason) {
           final seasonAptsKey = _kboSeasonAptsKey(
             playerName: playerName,
             club: normalizedClub,
@@ -1829,14 +1962,15 @@ Future<List<_PlayerRoundPoints>> _loadKboRoundPointsForPlayerShared({
           _cachedKboPlayerApts[seasonAptsKey] = _kLeagueAptsFromRoundPoints(
             mergedResult,
           );
-          _persistedKLeaguePlayerRoundPointsEntries[playerCacheKey] =
-              _PersistedPlayerRoundPointsEntry(
-                isSoccer: false,
-                updatedAt: DateTime.now(),
-                roundPoints: mergedResult,
-              );
-          unawaited(_persistKLeaguePlayerRoundPointsCache());
         }
+        _persistedKLeaguePlayerRoundPointsEntries[playerCacheKey] =
+            _PersistedPlayerRoundPointsEntry(
+              isSoccer: false,
+              hasFullSeason: hasFullSeason,
+              updatedAt: DateTime.now(),
+              roundPoints: mergedResult,
+            );
+        unawaited(_persistKLeaguePlayerRoundPointsCache());
         return mergedResult;
       }().whenComplete(() {
         _cachedKboPlayerRoundPointsFutures.remove(playerCacheKey);
@@ -2210,6 +2344,7 @@ class PlayerProfilePage extends StatefulWidget {
 
 class _PlayerProfilePageState extends State<PlayerProfilePage> {
   bool _isMyPageOpen = false;
+  bool _isLoadingFullKboHistory = false;
   late Future<_PlayerFantasyProfileData?> _fantasyProfileFuture;
   late Future<List<_PlayerRoundPoints>> _roundPointsFuture;
   List<_PlayerRoundPoints> _initialRoundPoints = const <_PlayerRoundPoints>[];
@@ -2236,14 +2371,18 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
 
   void _toggleMyPage() => setState(() => _isMyPageOpen = !_isMyPageOpen);
 
-  void _resetProfileFutures() {
-    final meta = widget.metaOverride != null
+  ({String position, String club, int number}) _currentProfileMeta() {
+    return widget.metaOverride != null
         ? (
             position: widget.metaOverride!.position,
             club: widget.metaOverride!.club,
             number: widget.metaOverride!.number,
           )
         : _resolvePlayerMeta(widget.name);
+  }
+
+  void _resetProfileFutures() {
+    final meta = _currentProfileMeta();
     final isSoccerPlayer = _normalizeFantasySoccerPosition(
       meta.position,
     ).isNotEmpty;
@@ -2277,33 +2416,67 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
   }
 
   Future<void> _hydrateInitialRoundPointsFromPersistedCache() async {
-    final meta = widget.metaOverride != null
-        ? (
-            position: widget.metaOverride!.position,
-            club: widget.metaOverride!.club,
-            number: widget.metaOverride!.number,
-          )
-        : _resolvePlayerMeta(widget.name);
+    final meta = _currentProfileMeta();
     final isSoccerPlayer = _normalizeFantasySoccerPosition(
       meta.position,
     ).isNotEmpty;
-    if (!isSoccerPlayer) return;
     await _restorePersistedKLeaguePlayerRoundPointsCache();
     if (!mounted) return;
-    final restored = _cachedKLeagueRoundPointsForPlayer(
-      playerName: widget.name,
-      club: meta.club,
-      preferredNumber: meta.number,
-    );
+    final restored = isSoccerPlayer
+        ? _cachedKLeagueRoundPointsForPlayer(
+            playerName: widget.name,
+            club: meta.club,
+            preferredNumber: meta.number,
+          )
+        : _cachedKboRoundPointsForPlayer(
+            playerName: widget.name,
+            club: meta.club,
+            preferredNumber: meta.number,
+            preferredPosition: meta.position,
+          );
     if (restored == null || restored.isEmpty) return;
     final nextInitial = _visibleProfileRoundPoints(
       restored.reversed.toList(),
-      isSoccerPlayer: true,
+      isSoccerPlayer: isSoccerPlayer,
     );
     if (listEquals(_initialRoundPoints, nextInitial)) return;
     setState(() {
       _initialRoundPoints = nextInitial;
     });
+  }
+
+  Future<void> _loadFullKboRoundHistory(
+    ({String position, String club, int number}) meta,
+  ) async {
+    if (_isLoadingFullKboHistory || !_isKnownKboPlayerMeta(meta)) return;
+    setState(() {
+      _isLoadingFullKboHistory = true;
+      _roundPointsFuture = () async {
+        final roundPoints = await _loadKboRoundPointsForPlayerShared(
+          playerName: widget.name,
+          club: meta.club,
+          preferredNumber: meta.number,
+          preferredPosition: meta.position,
+        );
+        return _visibleProfileRoundPoints(
+          roundPoints.reversed.toList(),
+          isSoccerPlayer: false,
+        );
+      }();
+    });
+    try {
+      final loaded = await _roundPointsFuture;
+      if (!mounted) return;
+      setState(() {
+        _initialRoundPoints = loaded;
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoadingFullKboHistory = false;
+        });
+      }
+    }
   }
 
   Future<List<_PlayerRoundPoints>> _loadRoundPoints(
@@ -2313,21 +2486,40 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
       meta.position,
     ).isNotEmpty;
     try {
-      final roundPoints = isSoccerPlayer
-          ? await _loadKLeagueRoundPointsForPlayerShared(
+      late final List<_PlayerRoundPoints> roundPoints;
+      if (isSoccerPlayer) {
+        roundPoints = await _loadKLeagueRoundPointsForPlayerShared(
+          playerName: widget.name,
+          club: meta.club,
+          preferredNumber: meta.number,
+        );
+      } else if (_isKnownKboPlayerMeta(meta)) {
+        await _restorePersistedKLeaguePlayerRoundPointsCache();
+        final cachedFullSeason = _cachedFullSeasonKboRoundPointsForPlayer(
+          playerName: widget.name,
+          club: meta.club,
+          preferredNumber: meta.number,
+          preferredPosition: meta.position,
+        );
+        if (cachedFullSeason != null && cachedFullSeason.isNotEmpty) {
+          roundPoints = cachedFullSeason;
+        } else {
+          final currentRound = _latestStartedKboFantasyRound(DateTime.now());
+          if (currentRound <= 0) {
+            roundPoints = const <_PlayerRoundPoints>[];
+          } else {
+            roundPoints = await _loadKboRoundPointsForPlayerShared(
               playerName: widget.name,
               club: meta.club,
               preferredNumber: meta.number,
-            )
-          : (_isKnownKboPlayerMeta(meta)
-                ? await _loadKboRoundPointsForPlayerShared(
-                    playerName: widget.name,
-                    club: meta.club,
-                    preferredNumber: meta.number,
-                    preferredPosition: meta.position,
-                    forceRefresh: true,
-                  )
-                : const <_PlayerRoundPoints>[]);
+              preferredPosition: meta.position,
+              targetRounds: <int>{currentRound},
+            );
+          }
+        }
+      } else {
+        roundPoints = const <_PlayerRoundPoints>[];
+      }
       return _visibleProfileRoundPoints(
         roundPoints.reversed.toList(),
         isSoccerPlayer: isSoccerPlayer,
@@ -2453,6 +2645,15 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
               builder: (context, roundSnapshot) {
                 final roundPoints =
                     roundSnapshot.data ?? const <_PlayerRoundPoints>[];
+                final hasFullKboHistory =
+                    isKboProfile &&
+                    _cachedFullSeasonKboRoundPointsForPlayer(
+                          playerName: widget.name,
+                          club: meta.club,
+                          preferredNumber: meta.number,
+                          preferredPosition: meta.position,
+                        ) !=
+                        null;
                 if (roundSnapshot.connectionState == ConnectionState.waiting &&
                     roundPoints.isEmpty) {
                   return const Center(
@@ -2463,210 +2664,247 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
                   );
                 }
                 if (roundPoints.isEmpty) {
-                  return Text(
-                    '이전 라운드 포인트가 아직 없습니다.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: muted,
-                    ),
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '이전 라운드 포인트가 아직 없습니다.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: muted,
+                        ),
+                      ),
+                      if (isKboProfile && !hasFullKboHistory) ...[
+                        const SizedBox(height: 12),
+                        OutlinedButton(
+                          onPressed: _isLoadingFullKboHistory
+                              ? null
+                              : () => unawaited(_loadFullKboRoundHistory(meta)),
+                          child: Text(
+                            _isLoadingFullKboHistory
+                                ? '이전 라운드 기록 불러오는 중...'
+                                : '이전 라운드 기록 불러오기',
+                          ),
+                        ),
+                      ],
+                    ],
                   );
                 }
 
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: roundPoints.map((entry) {
-                    final badge = entry.isCaptain
-                        ? 'C'
-                        : (entry.isViceCaptain ? 'VC' : null);
-                    final displayedDetails = isKboProfile
-                        ? _groupKboRoundPointDetails(entry.details)
-                        : entry.details;
-                    final didNotAppear = isKboProfile && !entry.appeared;
-                    final opponentLabel = entry.opponentLabel == null
-                        ? ''
-                        : (isKboProfile
-                              ? _displayFantasyOpponentLabel(
-                                  entry.opponentLabel!,
-                                  isSoccer: false,
-                                )
-                              : entry.opponentLabel!);
-                    final roundDateLabel = isKboProfile
-                        ? _kboFantasyRoundDateLabel(entry.round)
-                        : null;
-                    final roundHeader = isKboProfile
-                        ? (roundDateLabel == null
-                              ? '${entry.round} 라운드'
-                              : '${entry.round} 라운드 · $roundDateLabel')
-                        : (opponentLabel.isEmpty
-                              ? '${entry.round} 라운드'
-                              : '${entry.round} 라운드 · vs $opponentLabel');
-                    final scoreColor = entry.displayedPoints >= 0
-                        ? const Color(0xFF2E6BFF)
-                        : const Color(0xFFD94141);
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF162235)
-                            : const Color(0xFFEFF4FF),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
+                  children: [
+                    ...roundPoints.map((entry) {
+                      final badge = entry.isCaptain
+                          ? 'C'
+                          : (entry.isViceCaptain ? 'VC' : null);
+                      final displayedDetails = isKboProfile
+                          ? _groupKboRoundPointDetails(entry.details)
+                          : entry.details;
+                      final didNotAppear = isKboProfile && !entry.appeared;
+                      final opponentLabel = entry.opponentLabel == null
+                          ? ''
+                          : (isKboProfile
+                                ? _displayFantasyOpponentLabel(
+                                    entry.opponentLabel!,
+                                    isSoccer: false,
+                                  )
+                                : entry.opponentLabel!);
+                      final roundDateLabel = isKboProfile
+                          ? _kboFantasyRoundDateLabel(entry.round)
+                          : null;
+                      final roundHeader = isKboProfile
+                          ? (roundDateLabel == null
+                                ? '${entry.round} 라운드'
+                                : '${entry.round} 라운드 · $roundDateLabel')
+                          : (opponentLabel.isEmpty
+                                ? '${entry.round} 라운드'
+                                : '${entry.round} 라운드 · vs $opponentLabel');
+                      final scoreColor = entry.displayedPoints >= 0
+                          ? const Color(0xFF2E6BFF)
+                          : const Color(0xFFD94141);
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+                        decoration: BoxDecoration(
                           color: isDark
-                              ? const Color(0xFF30425D)
-                              : const Color(0xFFD7E3FF),
+                              ? const Color(0xFF162235)
+                              : const Color(0xFFEFF4FF),
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(
+                            color: isDark
+                                ? const Color(0xFF30425D)
+                                : const Color(0xFFD7E3FF),
+                          ),
+                          boxShadow: isDark
+                              ? const []
+                              : const [
+                                  BoxShadow(
+                                    color: Color(0x122E6BFF),
+                                    blurRadius: 14,
+                                    offset: Offset(0, 6),
+                                  ),
+                                ],
                         ),
-                        boxShadow: isDark
-                            ? const []
-                            : const [
-                                BoxShadow(
-                                  color: Color(0x122E6BFF),
-                                  blurRadius: 14,
-                                  offset: Offset(0, 6),
-                                ),
-                              ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            roundHeader,
-                                            style: TextStyle(
-                                              fontSize: 15,
-                                              fontWeight: FontWeight.w900,
-                                              color: text,
-                                            ),
-                                          ),
-                                        ),
-                                        if (badge != null) ...[
-                                          const SizedBox(width: 8),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFDCE8FF),
-                                              borderRadius:
-                                                  BorderRadius.circular(999),
-                                            ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Expanded(
                                             child: Text(
-                                              entry.isCaptain ? 'CAP' : 'VC',
-                                              style: const TextStyle(
-                                                fontSize: 10,
+                                              roundHeader,
+                                              style: TextStyle(
+                                                fontSize: 15,
                                                 fontWeight: FontWeight.w900,
-                                                color: Color(0xFF2E6BFF),
+                                                color: text,
                                               ),
                                             ),
                                           ),
+                                          if (badge != null) ...[
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 4,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFDCE8FF),
+                                                borderRadius:
+                                                    BorderRadius.circular(999),
+                                              ),
+                                              child: Text(
+                                                entry.isCaptain ? 'CAP' : 'VC',
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: Color(0xFF2E6BFF),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ],
+                                      ),
+                                      if (entry.isCaptain ||
+                                          entry.isViceCaptain)
+                                        const SizedBox(height: 6),
+                                      if (entry.isCaptain ||
+                                          entry.isViceCaptain)
+                                        Text(
+                                          '${entry.isCaptain ? 'base ${entry.basePoints.toStringAsFixed(1)}' : ''}'
+                                          '${entry.isCaptain && entry.isViceCaptain ? ' · ' : ''}'
+                                          '${entry.isViceCaptain ? 'VC 적용' : ''}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: muted,
+                                          ),
+                                        ),
+                                      if (isKboProfile &&
+                                          opponentLabel.isNotEmpty) ...[
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          'vs $opponentLabel',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: muted,
+                                          ),
+                                        ),
                                       ],
-                                    ),
-                                    if (entry.isCaptain || entry.isViceCaptain)
-                                      const SizedBox(height: 6),
-                                    if (entry.isCaptain || entry.isViceCaptain)
-                                      Text(
-                                        '${entry.isCaptain ? 'base ${entry.basePoints.toStringAsFixed(1)}' : ''}'
-                                        '${entry.isCaptain && entry.isViceCaptain ? ' · ' : ''}'
-                                        '${entry.isViceCaptain ? 'VC 적용' : ''}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: muted,
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Text(
+                                  didNotAppear
+                                      ? 'DNP'
+                                      : '${entry.displayedPoints.toStringAsFixed(1)} pts',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    height: 1.0,
+                                    fontWeight: FontWeight.w900,
+                                    color: didNotAppear
+                                        ? const Color(0xFF667085)
+                                        : scoreColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (didNotAppear) ...[
+                              const SizedBox(height: 12),
+                              Text(
+                                '출전하지 않음',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: muted,
+                                ),
+                              ),
+                            ] else if (displayedDetails.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              ...displayedDetails.map(
+                                (detail) => Padding(
+                                  padding: const EdgeInsets.only(top: 4),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          detail.detail == null ||
+                                                  detail.detail!.isEmpty
+                                              ? detail.label
+                                              : '${detail.label} · ${detail.detail}',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: muted,
+                                          ),
                                         ),
                                       ),
-                                    if (isKboProfile &&
-                                        opponentLabel.isNotEmpty) ...[
-                                      const SizedBox(height: 6),
                                       Text(
-                                        'vs $opponentLabel',
+                                        '${detail.points >= 0 ? '+' : ''}${detail.points.toStringAsFixed(1)}',
+                                        textAlign: TextAlign.right,
                                         style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: muted,
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w900,
+                                          color: detail.points >= 0
+                                              ? const Color(0xFF2E6BFF)
+                                              : const Color(0xFFD94141),
                                         ),
                                       ),
                                     ],
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 14),
-                              Text(
-                                didNotAppear
-                                    ? 'DNP'
-                                    : '${entry.displayedPoints.toStringAsFixed(1)} pts',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  height: 1.0,
-                                  fontWeight: FontWeight.w900,
-                                  color: didNotAppear
-                                      ? const Color(0xFF667085)
-                                      : scoreColor,
+                                  ),
                                 ),
                               ),
                             ],
-                          ),
-                          if (didNotAppear) ...[
-                            const SizedBox(height: 12),
-                            Text(
-                              '출전하지 않음',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                color: muted,
-                              ),
-                            ),
-                          ] else if (displayedDetails.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            ...displayedDetails.map(
-                              (detail) => Padding(
-                                padding: const EdgeInsets.only(top: 4),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        detail.detail == null ||
-                                                detail.detail!.isEmpty
-                                            ? detail.label
-                                            : '${detail.label} · ${detail.detail}',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
-                                          color: muted,
-                                        ),
-                                      ),
-                                    ),
-                                    Text(
-                                      '${detail.points >= 0 ? '+' : ''}${detail.points.toStringAsFixed(1)}',
-                                      textAlign: TextAlign.right,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w900,
-                                        color: detail.points >= 0
-                                            ? const Color(0xFF2E6BFF)
-                                            : const Color(0xFFD94141),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
                           ],
-                        ],
+                        ),
+                      );
+                    }),
+                    if (isKboProfile && !hasFullKboHistory) ...[
+                      const SizedBox(height: 6),
+                      OutlinedButton(
+                        onPressed: _isLoadingFullKboHistory
+                            ? null
+                            : () => unawaited(_loadFullKboRoundHistory(meta)),
+                        child: Text(
+                          _isLoadingFullKboHistory
+                              ? '이전 라운드 기록 불러오는 중...'
+                              : '이전 라운드 기록 불러오기',
+                        ),
                       ),
-                    );
-                  }).toList(),
+                    ],
+                  ],
                 );
               },
             );
@@ -2841,10 +3079,12 @@ class _PlayerFantasyProfileData {
 
 class _PersistedPlayerRoundPointsEntry {
   final bool isSoccer;
+  final bool hasFullSeason;
   final DateTime updatedAt;
   final List<_PlayerRoundPoints> roundPoints;
   const _PersistedPlayerRoundPointsEntry({
     required this.isSoccer,
+    required this.hasFullSeason,
     required this.updatedAt,
     required this.roundPoints,
   });

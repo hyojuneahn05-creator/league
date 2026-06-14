@@ -2260,7 +2260,7 @@ class _MatchDetailPageState extends State<MatchDetailPage>
     for (final player in players) {
       unique[_fantasyTeamPlayerIdentity(player)] = player;
     }
-    const batchSize = 3;
+    const batchSize = 2;
     final values = unique.values.toList();
     for (var start = 0; start < values.length; start += batchSize) {
       final end = min(start + batchSize, values.length);
@@ -4253,7 +4253,7 @@ class _MatchDetailPageState extends State<MatchDetailPage>
             }
           }
 
-          const batchSize = 3;
+          const batchSize = 2;
           final values = uniquePlayers.values.toList(growable: false);
           for (var index = 0; index < values.length; index += batchSize) {
             final batch = values.skip(index).take(batchSize);
@@ -5946,7 +5946,7 @@ class _MatchDetailPageState extends State<MatchDetailPage>
           for (final player in myTeam.starting)
             _playerSlotIdentity(player.toPlayerSlot()): player.toPlayerSlot(),
         };
-        const batchSize = 3;
+        const batchSize = 2;
         final pending = uniqueSlots.values.where((slot) {
           return _cachedKboRoundPointsForPlayer(
                 playerName: slot.name,
@@ -6724,7 +6724,7 @@ class _MatchDetailPageState extends State<MatchDetailPage>
           }
           if (slots.isEmpty) return;
 
-          const batchSize = 3;
+          const batchSize = 2;
           final values = slots.values.toList();
           for (var start = 0; start < values.length; start += batchSize) {
             final end = min(start + batchSize, values.length);
@@ -6985,7 +6985,7 @@ class _MatchDetailPageState extends State<MatchDetailPage>
       return cached == null;
     }).toList();
 
-    const batchSize = 3;
+    const batchSize = 2;
     for (var start = 0; start < pending.length; start += batchSize) {
       final end = min(start + batchSize, pending.length);
       final batch = pending.sublist(start, end);
@@ -11411,7 +11411,7 @@ Future<Map<String, double>> _loadProfileAptsForSlots(
     return results;
   }
 
-  const batchSize = 3;
+  const batchSize = 2;
   for (var start = 0; start < pending.length; start += batchSize) {
     final end = min(start + batchSize, pending.length);
     final batch = pending.sublist(start, end);
@@ -13920,7 +13920,7 @@ class _FantasyTeamProfilePageState extends State<_FantasyTeamProfilePage> {
       uniquePlayers[_playerSlotIdentity(slot)] = slot;
     }
 
-    const batchSize = 3;
+    const batchSize = 2;
     final pending = uniquePlayers.values
         .where((slot) => !_hasCachedKboRoundPointsForSlot(slot, targetKboRound))
         .toList();
@@ -19298,7 +19298,7 @@ class _FantasyFixtureDetailPageState extends State<_FantasyFixtureDetailPage> {
       }
     }
     if (uniqueSlots.isEmpty) return;
-    const batchSize = 3;
+    const batchSize = 2;
     final values = uniqueSlots.values.toList();
     for (var start = 0; start < values.length; start += batchSize) {
       final end = min(start + batchSize, values.length);
@@ -19524,7 +19524,7 @@ class _FantasyFixtureDetailPageState extends State<_FantasyFixtureDetailPage> {
         .where((slot) => !_hasCachedKboRoundPointsForSlot(slot, targetKboRound))
         .toList();
 
-    const batchSize = 3;
+    const batchSize = 2;
     for (var start = 0; start < pending.length; start += batchSize) {
       final end = min(start + batchSize, pending.length);
       final batch = pending.sublist(start, end);
@@ -21317,7 +21317,7 @@ class _TradeRequestDetailPageState extends State<_TradeRequestDetailPage> {
     for (final player in players) {
       unique[_fantasyTeamPlayerIdentity(player)] = player;
     }
-    const batchSize = 3;
+    const batchSize = 2;
     final values = unique.values.toList();
     for (var start = 0; start < values.length; start += batchSize) {
       final end = min(start + batchSize, values.length);
