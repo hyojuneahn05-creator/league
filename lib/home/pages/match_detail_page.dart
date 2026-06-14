@@ -5406,10 +5406,44 @@ class _MatchDetailPageState extends State<MatchDetailPage>
   }
 
   Future<void> _primeRosterLockData() async {
+    final now = DateTime.now();
     if (widget.isSoccer) {
-      await _loadCachedKLeagueLeagueData(forceRefresh: true);
+      if (_cachedKLeagueLeagueData != null &&
+          _isLeagueDataCacheFresh(
+            _cachedKLeagueLeagueDataUpdatedAt,
+            now: now,
+          )) {
+        if (!mounted) return;
+        setState(() {});
+        return;
+      }
+      final restored = await _restoreLeagueDataCacheEntry(
+        _kLeagueLeagueDataCacheKey,
+      );
+      if (restored != null &&
+          _isLeagueDataCacheFresh(restored.updatedAt, now: now)) {
+        _cachedKLeagueLeagueData = restored.data;
+        _cachedKLeagueLeagueDataUpdatedAt = restored.updatedAt ?? now;
+      } else {
+        await _loadCachedKLeagueLeagueData(forceRefresh: true);
+      }
     } else {
-      await _loadCachedKboLeagueData(forceRefresh: true);
+      if (_cachedKboLeagueData != null &&
+          _isLeagueDataCacheFresh(_cachedKboLeagueDataUpdatedAt, now: now)) {
+        if (!mounted) return;
+        setState(() {});
+        return;
+      }
+      final restored = await _restoreLeagueDataCacheEntry(
+        _kboLeagueDataCacheKey,
+      );
+      if (restored != null &&
+          _isLeagueDataCacheFresh(restored.updatedAt, now: now)) {
+        _cachedKboLeagueData = restored.data;
+        _cachedKboLeagueDataUpdatedAt = restored.updatedAt ?? now;
+      } else {
+        await _loadCachedKboLeagueData(forceRefresh: true);
+      }
     }
     if (!mounted) return;
     setState(() {});
@@ -6725,7 +6759,17 @@ class _MatchDetailPageState extends State<MatchDetailPage>
           if (slots.isEmpty) return;
 
           const batchSize = 2;
-          final values = slots.values.toList();
+          final values = slots.values
+              .where(
+                (slot) => !_hasCachedKboRoundPointsForSlot(slot, absoluteRound),
+              )
+              .toList();
+          if (values.isEmpty) {
+            _visibleKboRoundPointsLoadedKey = cacheKey;
+            if (!mounted) return;
+            setState(() {});
+            return;
+          }
           for (var start = 0; start < values.length; start += batchSize) {
             final end = min(start + batchSize, values.length);
             final batch = values.sublist(start, end);
@@ -6736,7 +6780,9 @@ class _MatchDetailPageState extends State<MatchDetailPage>
                   club: _normalizeKboDraftClub(slot.club),
                   preferredNumber: slot.number,
                   preferredPosition: slot.position,
-                  forceRefresh: forceRefresh,
+                  forceRefresh:
+                      forceRefresh &&
+                      !_hasCachedKboRoundPointsForSlot(slot, absoluteRound),
                   // Shared KBO round caches are keyed by absolute KBO round,
                   // not the draft-relative fantasy round used by matchup UI.
                   targetRounds: <int>{absoluteRound},

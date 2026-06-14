@@ -6,11 +6,14 @@ Future<Map<String, dynamic>>? _cachedKLeagueLeagueDataFuture;
 Map<String, dynamic>? _cachedKLeagueLeagueData;
 Future<Map<String, dynamic>>? _cachedKboLeagueDataFuture;
 Map<String, dynamic>? _cachedKboLeagueData;
+DateTime? _cachedKLeagueLeagueDataUpdatedAt;
+DateTime? _cachedKboLeagueDataUpdatedAt;
 const FlutterSecureStorage _leagueDataCacheStorage = FlutterSecureStorage(
   iOptions: IOSOptions(accountName: 'leagueit_local_state'),
 );
 const String _kLeagueLeagueDataCacheKey = 'kleague.league_data.v1';
 const String _kboLeagueDataCacheKey = 'kbo.league_data.v1';
+const Duration _leagueDataPrimeCacheTtl = Duration(minutes: 30);
 final Map<int, Future<Map<String, dynamic>>> _cachedKLeagueFixtureDetails =
     <int, Future<Map<String, dynamic>>>{};
 final Map<int, DateTime> _cachedKLeagueFixtureDetailsUpdatedAt =
@@ -1076,6 +1079,7 @@ Future<Map<String, dynamic>> _loadCachedKLeagueLeagueData({
         try {
           final value = await ApiService.fetchLeagueData();
           _cachedKLeagueLeagueData = value;
+          _cachedKLeagueLeagueDataUpdatedAt = DateTime.now();
           unawaited(_persistLeagueDataCache(_kLeagueLeagueDataCacheKey, value));
           return value;
         } catch (error, stackTrace) {
@@ -1084,15 +1088,17 @@ Future<Map<String, dynamic>> _loadCachedKLeagueLeagueData({
           if (cachedData != null) {
             return cachedData;
           }
-          final restored = await _restoreLeagueDataCache(
+          final restored = await _restoreLeagueDataCacheEntry(
             _kLeagueLeagueDataCacheKey,
           );
           if (restored != null) {
-            _cachedKLeagueLeagueData = restored;
-            return restored;
+            _cachedKLeagueLeagueData = restored.data;
+            _cachedKLeagueLeagueDataUpdatedAt = restored.updatedAt;
+            return restored.data;
           }
           final fallback = _emptyKLeagueLeagueData();
           _cachedKLeagueLeagueData = fallback;
+          _cachedKLeagueLeagueDataUpdatedAt = DateTime.now();
           return fallback;
         }
       }().whenComplete(() {
@@ -1118,6 +1124,7 @@ Future<Map<String, dynamic>> _loadCachedKboLeagueData({
         try {
           final value = await ApiService.fetchKboLeagueData();
           _cachedKboLeagueData = value;
+          _cachedKboLeagueDataUpdatedAt = DateTime.now();
           unawaited(_persistLeagueDataCache(_kboLeagueDataCacheKey, value));
           return value;
         } catch (error, stackTrace) {
@@ -1126,15 +1133,17 @@ Future<Map<String, dynamic>> _loadCachedKboLeagueData({
           if (cachedData != null) {
             return cachedData;
           }
-          final restored = await _restoreLeagueDataCache(
+          final restored = await _restoreLeagueDataCacheEntry(
             _kboLeagueDataCacheKey,
           );
           if (restored != null) {
-            _cachedKboLeagueData = restored;
-            return restored;
+            _cachedKboLeagueData = restored.data;
+            _cachedKboLeagueDataUpdatedAt = restored.updatedAt;
+            return restored.data;
           }
           final fallback = _emptyKboLeagueData();
           _cachedKboLeagueData = fallback;
+          _cachedKboLeagueDataUpdatedAt = DateTime.now();
           return fallback;
         }
       }().whenComplete(() {
@@ -1144,7 +1153,8 @@ Future<Map<String, dynamic>> _loadCachedKboLeagueData({
   return future;
 }
 
-Future<Map<String, dynamic>?> _restoreLeagueDataCache(String key) async {
+Future<({Map<String, dynamic> data, DateTime? updatedAt})?>
+_restoreLeagueDataCacheEntry(String key) async {
   try {
     final raw = await _readLocalStateCacheWithLegacySecureStorage(
       key: key,
@@ -1152,9 +1162,19 @@ Future<Map<String, dynamic>?> _restoreLeagueDataCache(String key) async {
     );
     if (raw == null || raw.trim().isEmpty) return null;
     final decoded = jsonDecode(raw);
-    if (decoded is Map<String, dynamic>) return decoded;
+    if (decoded is Map<String, dynamic>) {
+      final data = _fixtureAsMap(decoded['data']);
+      final updatedAt = DateTime.tryParse('${decoded['updatedAt'] ?? ''}');
+      if (data.isNotEmpty) {
+        return (data: data, updatedAt: updatedAt);
+      }
+      return (data: decoded, updatedAt: null);
+    }
     if (decoded is Map) {
-      return Map<String, dynamic>.from(decoded.cast<Object?, Object?>());
+      return (
+        data: Map<String, dynamic>.from(decoded.cast<Object?, Object?>()),
+        updatedAt: null,
+      );
     }
   } catch (error, stackTrace) {
     debugPrint('League data cache restore failed ($key): $error');
@@ -1163,12 +1183,23 @@ Future<Map<String, dynamic>?> _restoreLeagueDataCache(String key) async {
   return null;
 }
 
+Future<Map<String, dynamic>?> _restoreLeagueDataCache(String key) async {
+  final restored = await _restoreLeagueDataCacheEntry(key);
+  return restored?.data;
+}
+
 Future<void> _persistLeagueDataCache(
   String key,
   Map<String, dynamic> value,
 ) async {
   try {
-    await _writeLocalStateCache(key, jsonEncode(value));
+    await _writeLocalStateCache(
+      key,
+      jsonEncode(<String, dynamic>{
+        'updatedAt': DateTime.now().toIso8601String(),
+        'data': value,
+      }),
+    );
   } catch (error, stackTrace) {
     debugPrint('League data cache persist failed ($key): $error');
     debugPrint('$stackTrace');
@@ -1187,6 +1218,12 @@ Map<String, dynamic> _emptyKboLeagueData() => const <String, dynamic>{
   'standings': <dynamic>[],
   'matches': <dynamic>[],
 };
+
+bool _isLeagueDataCacheFresh(DateTime? updatedAt, {DateTime? now}) {
+  if (updatedAt == null) return false;
+  return (now ?? DateTime.now()).difference(updatedAt) <=
+      _leagueDataPrimeCacheTtl;
+}
 
 Future<Map<String, dynamic>> _loadCachedKLeagueFixtureDetail(
   int fixtureId, {
