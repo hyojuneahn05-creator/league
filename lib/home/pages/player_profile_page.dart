@@ -59,6 +59,30 @@ final Map<String, DateTime> _loggedKboMatchDetailFailuresAt =
 const Duration _kboProfileCacheTtl = Duration(minutes: 5);
 const Duration _kboMatchDetailFailureCooldown = Duration(seconds: 30);
 const Duration _kboMatchDetailLogCooldown = Duration(seconds: 30);
+const int _kboMatchDetailConcurrencyLimit = 3;
+int _activeKboMatchDetailRequests = 0;
+final Queue<Completer<void>> _pendingKboMatchDetailRequestSlots =
+    Queue<Completer<void>>();
+
+Future<T> _runKboMatchDetailRequestLimited<T>(
+  Future<T> Function() action,
+) async {
+  if (_activeKboMatchDetailRequests >= _kboMatchDetailConcurrencyLimit) {
+    final waiter = Completer<void>();
+    _pendingKboMatchDetailRequestSlots.addLast(waiter);
+    await waiter.future;
+  }
+  _activeKboMatchDetailRequests += 1;
+  try {
+    return await action();
+  } finally {
+    _activeKboMatchDetailRequests = max(0, _activeKboMatchDetailRequests - 1);
+    if (_pendingKboMatchDetailRequestSlots.isNotEmpty) {
+      _pendingKboMatchDetailRequestSlots.removeFirst().complete();
+    }
+  }
+}
+
 const FlutterSecureStorage _kLeaguePlayerRoundPointsStorage =
     FlutterSecureStorage(
       iOptions: IOSOptions(accountName: 'leagueit_local_state'),
@@ -695,7 +719,12 @@ Future<Map<String, dynamic>> _loadCachedKboMatchDetail(
   final cached = _cachedKboMatchDetails[cacheKey];
   if (cached != null) return cached;
   final future =
-      ApiService.fetchKboMatchDetails(matchId, fantasyRound: fantasyRound)
+      _runKboMatchDetailRequestLimited(
+            () => ApiService.fetchKboMatchDetails(
+              matchId,
+              fantasyRound: fantasyRound,
+            ),
+          )
           .then((detail) {
             _cachedKboMatchDetailFailureTimestamps.remove(cacheKey);
             _cachedKboMatchDetailFailureMessages.remove(cacheKey);
@@ -1216,6 +1245,7 @@ Future<double?> _loadKboPlayerAptsShared({
   required String club,
   int? preferredNumber,
   String? preferredPosition,
+  bool allowHistoryFetch = true,
 }) {
   final cacheKey = _kboSeasonAptsKey(
     playerName: playerName,
@@ -1245,6 +1275,9 @@ Future<double?> _loadKboPlayerAptsShared({
   );
   if (_cachedKboPlayerRoundPointsHasFullSeason[roundPointsKey] == true &&
       _cachedKboPlayerApts.containsKey(cacheKey)) {
+    return Future.value(_cachedKboPlayerApts[cacheKey]);
+  }
+  if (!allowHistoryFetch) {
     return Future.value(_cachedKboPlayerApts[cacheKey]);
   }
 
@@ -1711,9 +1744,22 @@ Future<List<_PlayerRoundPoints>> _loadKboRoundPointsForPlayerShared({
           );
         }
 
-        final resolvedMatches = await Future.wait(
-          relevantMatches.map(resolveMatchRoundScore),
-        );
+        final resolvedMatches =
+            <({int round, _KLeaguePlayerRoundAccumulator score})?>[];
+        for (
+          var start = 0;
+          start < relevantMatches.length;
+          start += _kboMatchDetailConcurrencyLimit
+        ) {
+          final end = min(
+            start + _kboMatchDetailConcurrencyLimit,
+            relevantMatches.length,
+          );
+          final batch = relevantMatches.sublist(start, end);
+          resolvedMatches.addAll(
+            await Future.wait(batch.map(resolveMatchRoundScore)),
+          );
+        }
         final resolvedMatchCountsByRound = <int, int>{};
         final fullyResolvedRounds = <int>{};
         for (final resolved
@@ -2347,6 +2393,10 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
     final isKboProfile =
         _normalizeFantasySoccerPosition(meta.position).isEmpty &&
         _isKnownKboPlayerMeta(meta);
+    final displayClub = _displayFantasyClubName(
+      meta.club,
+      isSoccer: !isKboProfile,
+    );
 
     Widget infoTile(String label, String value, {Color? valueColor}) {
       return Container(
@@ -2433,6 +2483,14 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
                         ? _groupKboRoundPointDetails(entry.details)
                         : entry.details;
                     final didNotAppear = isKboProfile && !entry.appeared;
+                    final opponentLabel = entry.opponentLabel == null
+                        ? ''
+                        : (isKboProfile
+                              ? _displayFantasyOpponentLabel(
+                                  entry.opponentLabel!,
+                                  isSoccer: false,
+                                )
+                              : entry.opponentLabel!);
                     final roundDateLabel = isKboProfile
                         ? _kboFantasyRoundDateLabel(entry.round)
                         : null;
@@ -2440,10 +2498,9 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
                         ? (roundDateLabel == null
                               ? '${entry.round} 라운드'
                               : '${entry.round} 라운드 · $roundDateLabel')
-                        : (entry.opponentLabel == null ||
-                                  entry.opponentLabel!.isEmpty
+                        : (opponentLabel.isEmpty
                               ? '${entry.round} 라운드'
-                              : '${entry.round} 라운드 · vs ${entry.opponentLabel}');
+                              : '${entry.round} 라운드 · vs $opponentLabel');
                     final scoreColor = entry.displayedPoints >= 0
                         ? const Color(0xFF2E6BFF)
                         : const Color(0xFFD94141);
@@ -2530,11 +2587,10 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
                                         ),
                                       ),
                                     if (isKboProfile &&
-                                        entry.opponentLabel != null &&
-                                        entry.opponentLabel!.isNotEmpty) ...[
+                                        opponentLabel.isNotEmpty) ...[
                                       const SizedBox(height: 6),
                                       Text(
-                                        'vs ${entry.opponentLabel}',
+                                        'vs $opponentLabel',
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w700,
@@ -2656,7 +2712,7 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
               const SizedBox(height: 10),
               infoTile('포지션', meta.position),
               const SizedBox(height: 10),
-              infoTile('소속팀', meta.club),
+              infoTile('소속팀', displayClub),
               const SizedBox(height: 10),
               infoTile('등번호', '${meta.number}'),
               const SizedBox(height: 10),

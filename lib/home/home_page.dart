@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:math';
 import 'dart:io';
@@ -59,13 +60,17 @@ const FlutterSecureStorage _profileAvatarStorage = FlutterSecureStorage(
 final ValueNotifier<String?> _profileAvatarPathNotifier =
     ValueNotifier<String?>(null);
 final Map<String, ValueNotifier<String?>> _publicProfileAvatarUrlNotifiers = {};
+final Map<String, String> _publicProfileDisplayNameCache = {};
 bool _profileAvatarPathLoaded = false;
 String _profileAvatarPathLoadedUid = '';
 Future<void>? _profileAvatarPathLoadFuture;
 int _profileAvatarPathLoadToken = 0;
 final Map<String, Future<void>> _publicProfileAvatarUrlLoadFutures = {};
+final Map<String, Future<void>> _publicProfileDisplayNameLoadFutures = {};
 const String _localStateCacheDirectoryName = 'local_state_cache';
 Future<Directory>? _localStateCacheDirectoryFuture;
+final Map<String, Future<void>> _localStateCacheWriteFutures =
+    <String, Future<void>>{};
 
 Future<Directory> _ensureLocalStateCacheDirectory() {
   final inFlight = _localStateCacheDirectoryFuture;
@@ -106,18 +111,52 @@ Future<String?> _readLocalStateCache(String key) async {
   }
 }
 
-Future<void> _writeLocalStateCache(String key, String value) async {
+Future<void> _writeLocalStateCacheUnlocked(String key, String value) async {
   final file = await _localStateCacheFile(key);
+  if (!await file.parent.exists()) {
+    await file.parent.create(recursive: true);
+  }
   final tempFile = File('${file.path}.tmp');
+  if (!await tempFile.parent.exists()) {
+    await tempFile.parent.create(recursive: true);
+  }
   await tempFile.writeAsString(value, flush: true);
-  await tempFile.rename(file.path);
+  if (!await file.parent.exists()) {
+    await file.parent.create(recursive: true);
+  }
+  try {
+    await tempFile.rename(file.path);
+  } catch (error, stackTrace) {
+    debugPrint('Local state cache rename failed ($key): $error');
+    debugPrint('$stackTrace');
+  }
+}
+
+Future<void> _writeLocalStateCache(String key, String value) {
+  final previous = _localStateCacheWriteFutures[key] ?? Future<void>.value();
+  final next = previous
+      .catchError((Object error, StackTrace stackTrace) {})
+      .then((_) => _writeLocalStateCacheUnlocked(key, value));
+  _localStateCacheWriteFutures[key] = next.whenComplete(() {
+    if (identical(_localStateCacheWriteFutures[key], next)) {
+      _localStateCacheWriteFutures.remove(key);
+    }
+  });
+  return _localStateCacheWriteFutures[key]!;
 }
 
 Future<void> _deleteLocalStateCache(String key) async {
   try {
     final file = await _localStateCacheFile(key);
+    if (!await file.parent.exists()) return;
     if (await file.exists()) {
       await file.delete();
+    } else {
+      final tempFile = File('${file.path}.tmp');
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+      return;
     }
     final tempFile = File('${file.path}.tmp');
     if (await tempFile.exists()) {
@@ -447,6 +486,19 @@ String _currentSignedInFantasyDisplayName() {
   return emailPrefix;
 }
 
+String _cachedPublicFantasyDisplayNameForUid(String uid) {
+  final normalizedUid = uid.trim();
+  if (normalizedUid.isEmpty) return '';
+
+  final currentUid = FirebaseAuth.instance.currentUser?.uid.trim() ?? '';
+  if (normalizedUid == currentUid) {
+    final preferred = _currentSignedInFantasyDisplayName();
+    if (preferred.isNotEmpty) return preferred;
+  }
+
+  return _publicProfileDisplayNameCache[normalizedUid]?.trim() ?? '';
+}
+
 String _normalizedFantasyIdentityText(String value) {
   return value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 }
@@ -460,11 +512,9 @@ bool _sameFantasyIdentity(String left, String right) {
 String _normalizedFantasyDisplayNameForUid(String uid, String fallback) {
   final normalizedUid = uid.trim();
   final normalizedFallback = fallback.trim();
-  final currentUid = FirebaseAuth.instance.currentUser?.uid.trim() ?? '';
-  if (normalizedUid.isEmpty || normalizedUid != currentUid) {
-    return normalizedFallback;
-  }
-  final preferred = _currentSignedInFantasyDisplayName();
+  if (normalizedUid.isEmpty) return normalizedFallback;
+
+  final preferred = _cachedPublicFantasyDisplayNameForUid(normalizedUid);
   return preferred.isNotEmpty ? preferred : normalizedFallback;
 }
 
@@ -591,11 +641,102 @@ void _cachePublicProfileAvatarUrl(String uid, String? url) {
       normalizedUrl.isEmpty ? null : normalizedUrl;
 }
 
+void _cachePublicProfileDisplayName(String uid, String? displayName) {
+  final normalizedUid = uid.trim();
+  if (normalizedUid.isEmpty) return;
+
+  final normalizedDisplayName = displayName?.trim() ?? '';
+  if (normalizedDisplayName.isEmpty) {
+    _publicProfileDisplayNameCache.remove(normalizedUid);
+    return;
+  }
+  _publicProfileDisplayNameCache[normalizedUid] = normalizedDisplayName;
+}
+
 void _clearPublicProfileAvatarUrlCache() {
   for (final notifier in _publicProfileAvatarUrlNotifiers.values) {
     notifier.value = null;
   }
   _publicProfileAvatarUrlLoadFutures.clear();
+}
+
+void _clearPublicProfileDisplayNameCache() {
+  _publicProfileDisplayNameCache.clear();
+  _publicProfileDisplayNameLoadFutures.clear();
+}
+
+Future<void> _ensurePublicProfileDisplayNameLoaded(
+  String uid, {
+  bool force = false,
+}) {
+  final normalizedUid = uid.trim();
+  if (normalizedUid.isEmpty) return Future<void>.value();
+
+  if (!force &&
+      (_publicProfileDisplayNameCache[normalizedUid]?.trim().isNotEmpty ??
+          false)) {
+    return Future<void>.value();
+  }
+
+  final inFlight = _publicProfileDisplayNameLoadFutures[normalizedUid];
+  if (!force && inFlight != null) return inFlight;
+
+  final future = FirebaseFirestore.instance
+      .collection(kPublicUserProfilesCollection)
+      .doc(normalizedUid)
+      .get()
+      .then((snapshot) async {
+        final data = snapshot.data() ?? const <String, dynamic>{};
+        var displayName = '${data['displayName'] ?? ''}'.trim();
+        final currentUid = FirebaseAuth.instance.currentUser?.uid.trim() ?? '';
+        if (displayName.isEmpty && normalizedUid == currentUid) {
+          displayName = _currentSignedInFantasyDisplayName();
+          if (displayName.isNotEmpty) {
+            unawaited(
+              syncCurrentUserPublicProfileFromAuth(
+                FirebaseFirestore.instance,
+                displayNameOverride: displayName,
+                normalizedDisplayNameOverride: _normalizedFantasyIdentityText(
+                  displayName,
+                ),
+              ).catchError((error, stackTrace) {
+                debugPrint(
+                  'Current user public profile displayName backfill failed '
+                  '(uid=$normalizedUid): $error',
+                );
+                debugPrint('$stackTrace');
+              }),
+            );
+          }
+        }
+        if (displayName.isEmpty && normalizedUid != currentUid) {
+          try {
+            final profile = await LeagueService.instance.getPublicUserProfile(
+              normalizedUid,
+            );
+            displayName = '${profile?['displayName'] ?? ''}'.trim();
+          } catch (error, stackTrace) {
+            debugPrint(
+              'Public profile displayName callable fallback failed '
+              '(uid=$normalizedUid): $error',
+            );
+            debugPrint('$stackTrace');
+          }
+        }
+        _cachePublicProfileDisplayName(normalizedUid, displayName);
+      })
+      .catchError((error, stackTrace) {
+        debugPrint(
+          'Public profile displayName load failed (uid=$normalizedUid): $error',
+        );
+        debugPrint('$stackTrace');
+      })
+      .whenComplete(() {
+        _publicProfileDisplayNameLoadFutures.remove(normalizedUid);
+      });
+
+  _publicProfileDisplayNameLoadFutures[normalizedUid] = future;
+  return future;
 }
 
 Future<void> _ensurePublicProfileAvatarUrlLoaded(
@@ -619,6 +760,10 @@ Future<void> _ensurePublicProfileAvatarUrlLoaded(
       .get()
       .then((snapshot) async {
         final data = snapshot.data() ?? const <String, dynamic>{};
+        _cachePublicProfileDisplayName(
+          normalizedUid,
+          '${data['displayName'] ?? ''}',
+        );
         var photoUrl = '${data['photoUrl'] ?? ''}'.trim();
         final currentUid = FirebaseAuth.instance.currentUser?.uid.trim() ?? '';
         if (photoUrl.isEmpty && normalizedUid == currentUid) {
@@ -642,6 +787,10 @@ Future<void> _ensurePublicProfileAvatarUrlLoaded(
           try {
             final profile = await LeagueService.instance.getPublicUserProfile(
               normalizedUid,
+            );
+            _cachePublicProfileDisplayName(
+              normalizedUid,
+              '${profile?['displayName'] ?? ''}',
             );
             photoUrl = '${profile?['photoUrl'] ?? ''}'.trim();
           } catch (error, stackTrace) {
@@ -701,6 +850,22 @@ class _HomeSearchSuggestion {
     required this.isSoccer,
     required this.meta,
   });
+}
+
+String _homeSearchSuggestionClubLabel(_HomeSearchSuggestion suggestion) {
+  return _displayFantasyClubName(
+    suggestion.meta.club,
+    isSoccer: suggestion.isSoccer,
+  );
+}
+
+bool _homeSearchSuggestionMatchesClub(
+  _HomeSearchSuggestion suggestion,
+  String queryLower,
+) {
+  final rawClub = suggestion.meta.club.toLowerCase();
+  final displayClub = _homeSearchSuggestionClubLabel(suggestion).toLowerCase();
+  return rawClub.contains(queryLower) || displayClub.contains(queryLower);
 }
 
 class _JoinedDraft {
@@ -765,33 +930,35 @@ _JoinedDraft _joinedDraftFromJoinLeagueResponse(
     throw StateError('Draft 정보가 없는 리그입니다.');
   }
 
-  return _JoinedDraft(
-    leagueId: '${data['leagueId'] ?? ''}',
-    leagueName: '${data['leagueName'] ?? 'My League'}',
-    when: draftTime.toLocal(),
-    isSoccer: '${data['sport'] ?? 'soccer'}' == 'soccer',
-    teamCount: data['teamCount'] is int
-        ? data['teamCount'] as int
-        : int.tryParse('${data['teamCount'] ?? 8}') ?? 8,
-    memberCount: data['memberCount'] is int
-        ? data['memberCount'] as int
-        : int.tryParse('${data['memberCount'] ?? 1}') ?? 1,
-    inviteCode: '${data['inviteCode'] ?? fallbackCode}',
-    ownerId: '${data['ownerId'] ?? ''}',
-    draftOrder:
-        (data['draftOrder'] as List<dynamic>? ?? const [])
-            .whereType<Map>()
-            .map(
-              (item) => _DraftOrderEntry(
-                uid: '${item['uid'] ?? ''}',
-                displayName: '${item['displayName'] ?? 'Team'}',
-                slot: item['slot'] is int
-                    ? item['slot'] as int
-                    : int.tryParse('${item['slot'] ?? 0}') ?? 0,
-              ),
-            )
-            .toList()
-          ..sort((a, b) => a.slot.compareTo(b.slot)),
+  return _normalizeJoinedDraftFantasyParticipants(
+    _JoinedDraft(
+      leagueId: '${data['leagueId'] ?? ''}',
+      leagueName: '${data['leagueName'] ?? 'My League'}',
+      when: draftTime.toLocal(),
+      isSoccer: '${data['sport'] ?? 'soccer'}' == 'soccer',
+      teamCount: data['teamCount'] is int
+          ? data['teamCount'] as int
+          : int.tryParse('${data['teamCount'] ?? 8}') ?? 8,
+      memberCount: data['memberCount'] is int
+          ? data['memberCount'] as int
+          : int.tryParse('${data['memberCount'] ?? 1}') ?? 1,
+      inviteCode: '${data['inviteCode'] ?? fallbackCode}',
+      ownerId: '${data['ownerId'] ?? ''}',
+      draftOrder:
+          (data['draftOrder'] as List<dynamic>? ?? const [])
+              .whereType<Map>()
+              .map(
+                (item) => _DraftOrderEntry(
+                  uid: '${item['uid'] ?? ''}',
+                  displayName: '${item['displayName'] ?? 'Team'}',
+                  slot: item['slot'] is int
+                      ? item['slot'] as int
+                      : int.tryParse('${item['slot'] ?? 0}') ?? 0,
+                ),
+              )
+              .toList()
+            ..sort((a, b) => a.slot.compareTo(b.slot)),
+    ),
   );
 }
 
@@ -853,6 +1020,8 @@ class _KboFantasyRoundScoreState {
   final int round;
   final double bankedScore;
   final Map<String, double> starterBaselines;
+  final List<_FantasyTeamPlayer> starterPlayers;
+  final String? doubledPlayerId;
   final DateTime updatedAt;
   final double? unlockedScoreSnapshot;
   final DateTime? unlockedAt;
@@ -861,6 +1030,8 @@ class _KboFantasyRoundScoreState {
     required this.round,
     required this.bankedScore,
     required this.starterBaselines,
+    this.starterPlayers = const [],
+    this.doubledPlayerId,
     required this.updatedAt,
     this.unlockedScoreSnapshot,
     this.unlockedAt,
@@ -870,6 +1041,8 @@ class _KboFantasyRoundScoreState {
     'round': round,
     'bankedScore': bankedScore,
     'starterBaselines': starterBaselines,
+    'starterPlayers': starterPlayers.map((player) => player.toMap()).toList(),
+    'doubledPlayerId': doubledPlayerId,
     'updatedAt': updatedAt.toIso8601String(),
     'unlockedScoreSnapshot': unlockedScoreSnapshot,
     'unlockedAt': unlockedAt?.toIso8601String(),
@@ -1943,6 +2116,20 @@ Future<void> _persistFantasySoccerRoundScoreCache() async {
 String _fantasyTeamIdentity({required String uid, required String teamName}) =>
     uid.trim().isNotEmpty ? uid.trim() : teamName.trim();
 
+String _normalizeLegacyFantasyPlayerId(String value) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return '';
+  final parts = trimmed.split('|');
+  if (parts.length != 3) return trimmed;
+  final club = parts[0].trim();
+  final number = int.tryParse(parts[1].trim());
+  final name = parts[2].trim();
+  if (number == null || name.isEmpty) return trimmed;
+  final normalizedClub = _canonicalKLeagueClub(_kLeagueDisplayTeamName(club));
+  if (normalizedClub.isEmpty) return trimmed;
+  return '$normalizedClub|$number|$name';
+}
+
 String _fantasyPlayerIdentity({
   required String name,
   String club = '',
@@ -1950,7 +2137,9 @@ String _fantasyPlayerIdentity({
   String playerId = '',
 }) {
   final explicit = playerId.trim();
-  if (explicit.isNotEmpty) return explicit;
+  if (explicit.isNotEmpty) {
+    return _normalizeLegacyFantasyPlayerId(explicit);
+  }
   final canonicalClub = _canonicalKLeagueClub(_kLeagueDisplayTeamName(club));
   if (canonicalClub.isNotEmpty && number > 0) {
     return '$canonicalClub|$number|${name.trim()}';
@@ -2538,6 +2727,7 @@ _computeFantasySoccerRoundScoreSnapshot(
 
   var allFinal = relevantFixtures.isNotEmpty;
   final baseByClubAndPlayer = <String, double>{};
+  final appearedKeys = <String>{};
   for (final rawFixture in relevantFixtures) {
     final fixture = _fixtureAsMap(rawFixture['fixture']);
     final fixtureId = _readNullableInt(fixture['id']);
@@ -2556,14 +2746,15 @@ _computeFantasySoccerRoundScoreSnapshot(
       if (!_isKLeagueFinalStatus(_fixtureText(status['short']))) {
         allFinal = false;
       }
-      final scores = _kLeagueFantasyBaseScoresFromDetail(detail);
-      scores.forEach(
+      final bundle = _kLeagueFantasyPlayerScoresFromDetail(detail);
+      bundle.scores.forEach(
         (key, score) => baseByClubAndPlayer.update(
           key,
           (value) => value + score,
           ifAbsent: () => score,
         ),
       );
+      appearedKeys.addAll(bundle.appearedKeys);
     } catch (error, stackTrace) {
       debugPrint(
         'Fantasy soccer round score detail load failed '
@@ -2606,6 +2797,28 @@ _computeFantasySoccerRoundScoreSnapshot(
       final meta = _resolvePlayerMeta(player.name);
       return baseByClubAndPlayer['${_canonicalKLeagueClub(meta.club)}|${player.name}'] ??
           0;
+    }
+
+    bool appearedFor(_FantasyTeamPlayer player) {
+      final clubKey = _canonicalKLeagueClub(player.club);
+      if (clubKey.isNotEmpty) {
+        final directKey = '$clubKey|${player.name}';
+        if (appearedKeys.contains(directKey)) return true;
+        if (player.number > 0) {
+          final rosterName = _kLeagueRosterNameForClubNumber(
+            clubKey,
+            '${player.number}',
+          );
+          if (rosterName.isNotEmpty &&
+              appearedKeys.contains('$clubKey|$rosterName')) {
+            return true;
+          }
+        }
+      }
+      final meta = _resolvePlayerMeta(player.name);
+      return appearedKeys.contains(
+        '${_canonicalKLeagueClub(meta.club)}|${player.name}',
+      );
     }
 
     final rankedStarters = [...team.starting]
@@ -2655,13 +2868,17 @@ _computeFantasySoccerRoundScoreSnapshot(
     captainNames[teamKey] = captain;
     viceCaptainNames[teamKey] = viceCaptainPlayer?.name;
     captainPlayerIds[teamKey] = captainId;
-    viceCaptainPlayerIds[teamKey] = viceCaptainPlayer == null
+    final viceCaptainId = viceCaptainPlayer == null
         ? null
         : _fantasyTeamPlayerIdentity(viceCaptainPlayer);
+    viceCaptainPlayerIds[teamKey] = viceCaptainId;
+    final doubledPlayerId = captainPlayer != null && appearedFor(captainPlayer)
+        ? captainId
+        : viceCaptainId;
 
     for (final player in team.roster) {
       final base = baseScoreFor(player);
-      final displayed = _fantasyTeamPlayerIdentity(player) == captainId
+      final displayed = _fantasyTeamPlayerIdentity(player) == doubledPlayerId
           ? base * 2
           : base;
       final playerKey = _fantasySoccerPlayerCacheKey(
@@ -2845,6 +3062,97 @@ bool _isCaptainFantasyPlayerForTeam(
   return team.captainName == player.name;
 }
 
+_FantasyTeamPlayer? _captainFantasyPlayerForTeam(_FantasyTeamState? team) {
+  if (team == null) return null;
+  final startersById = <String, _FantasyTeamPlayer>{
+    for (final player in team.starting)
+      _fantasyTeamPlayerIdentity(player): player,
+  };
+  if (team.captainPlayerId?.trim().isNotEmpty == true) {
+    return startersById[team.captainPlayerId];
+  }
+  final captainName = team.captainName?.trim();
+  if (captainName == null || captainName.isEmpty) return null;
+  return team.starting.cast<_FantasyTeamPlayer?>().firstWhere(
+    (player) => player?.name == captainName,
+    orElse: () => null,
+  );
+}
+
+_FantasyTeamPlayer? _viceCaptainFantasyPlayerForTeam(
+  _FantasyTeamState? team, {
+  String? excludingPlayerId,
+}) {
+  if (team == null) return null;
+  final startersById = <String, _FantasyTeamPlayer>{
+    for (final player in team.starting)
+      _fantasyTeamPlayerIdentity(player): player,
+  };
+  if (team.viceCaptainPlayerId?.trim().isNotEmpty == true &&
+      team.viceCaptainPlayerId != excludingPlayerId) {
+    final byId = startersById[team.viceCaptainPlayerId];
+    if (byId != null) return byId;
+  }
+  final viceCaptainName = team.viceCaptainName?.trim();
+  if (viceCaptainName == null || viceCaptainName.isEmpty) return null;
+  return team.starting.cast<_FantasyTeamPlayer?>().firstWhere(
+    (player) =>
+        player?.name == viceCaptainName &&
+        _fantasyTeamPlayerIdentity(player!) != excludingPlayerId,
+    orElse: () => null,
+  );
+}
+
+bool _fantasyKboPlayerAppearedInRound(
+  _FantasyTeamPlayer player, {
+  required _JoinedDraft draft,
+  required int round,
+}) {
+  if (!_kboFantasyRoundHasStarted(draft, round, DateTime.now())) {
+    return false;
+  }
+  final absoluteRound = _mappedKboRoundForFantasyRound(draft, round);
+  final roundPoints = _cachedKboRoundPointsForPlayer(
+    playerName: player.name,
+    club: _normalizeKboDraftClub(player.club),
+    preferredNumber: player.number,
+    preferredPosition: player.position,
+  );
+  if (roundPoints == null) return false;
+  for (final entry in roundPoints) {
+    if (entry.round == absoluteRound) {
+      return entry.appeared;
+    }
+  }
+  return false;
+}
+
+String? _effectiveCaptainDoublePlayerIdForKboTeam(
+  _FantasyTeamState? team, {
+  required _JoinedDraft draft,
+  required int round,
+}) {
+  final captainPlayer = _captainFantasyPlayerForTeam(team);
+  final captainId = captainPlayer == null
+      ? null
+      : _fantasyTeamPlayerIdentity(captainPlayer);
+  if (captainPlayer == null || captainId == null) return null;
+  if (_fantasyKboPlayerAppearedInRound(
+    captainPlayer,
+    draft: draft,
+    round: round,
+  )) {
+    return captainId;
+  }
+  final viceCaptainPlayer = _viceCaptainFantasyPlayerForTeam(
+    team,
+    excludingPlayerId: captainId,
+  );
+  return viceCaptainPlayer == null
+      ? captainId
+      : _fantasyTeamPlayerIdentity(viceCaptainPlayer);
+}
+
 double _fantasyKboBasePlayerRoundScore(
   _FantasyTeamPlayer player, {
   required _JoinedDraft draft,
@@ -2880,7 +3188,14 @@ double _fantasyKboDisplayedPlayerRoundScore(
     draft: draft,
     round: round,
   );
-  return _isCaptainFantasyPlayerForTeam(team, player) ? base * 2 : base;
+  final doubledPlayerId = _effectiveCaptainDoublePlayerIdForKboTeam(
+    team,
+    draft: draft,
+    round: round,
+  );
+  return _fantasyTeamPlayerIdentity(player) == doubledPlayerId
+      ? base * 2
+      : base;
 }
 
 double _fantasyPlayerRoundScore(
@@ -2938,15 +3253,28 @@ double _fantasyTeamRoundScore(
   final state = _kboRoundScoreStateForTeam(team, round);
   final baselines = state?.starterBaselines ?? const <String, double>{};
   final bankedScore = state?.bankedScore ?? 0.0;
+  final roundPlayers = state == null
+      ? team.starting
+      : _resolvedKboRoundStarterPlayers(team, state);
+  final doubledPlayerId = state?.doubledPlayerId?.trim().isNotEmpty == true
+      ? state!.doubledPlayerId!.trim()
+      : _effectiveCaptainDoublePlayerIdForKboTeam(
+          team,
+          draft: draft,
+          round: round,
+        );
   return bankedScore +
-      team.starting.fold<double>(0.0, (total, player) {
-        final current = _fantasyKboDisplayedPlayerRoundScore(
+      roundPlayers.fold<double>(0.0, (total, player) {
+        final playerIdentity = _fantasyTeamPlayerIdentity(player);
+        final currentBase = _fantasyKboBasePlayerRoundScore(
           player,
           draft: draft,
           round: round,
-          team: team,
         );
-        final baseline = baselines[_fantasyTeamPlayerIdentity(player)] ?? 0.0;
+        final current = playerIdentity == doubledPlayerId
+            ? currentBase * 2
+            : currentBase;
+        final baseline = baselines[playerIdentity] ?? 0.0;
         return total + (current - baseline);
       });
 }
@@ -3167,6 +3495,11 @@ List<_KboFantasyRoundScoreState> _parseKboRoundScoreStates(dynamic raw) {
                     0.0;
               }
             }
+            final starterPlayers = _parseFantasyTeamPlayers(
+              map['starterPlayers'],
+              isSoccer: false,
+            );
+            final doubledPlayerId = '${map['doubledPlayerId'] ?? ''}'.trim();
             final updatedAt =
                 DateTime.tryParse('${map['updatedAt'] ?? ''}') ??
                 DateTime(1970);
@@ -3177,6 +3510,8 @@ List<_KboFantasyRoundScoreState> _parseKboRoundScoreStates(dynamic raw) {
                   double.tryParse('${map['bankedScore'] ?? ''}') ??
                   0.0,
               starterBaselines: starterBaselines,
+              starterPlayers: starterPlayers,
+              doubledPlayerId: doubledPlayerId.isEmpty ? null : doubledPlayerId,
               updatedAt: updatedAt,
               unlockedScoreSnapshot:
                   (map['unlockedScoreSnapshot'] as num?)?.toDouble() ??
@@ -3188,6 +3523,34 @@ List<_KboFantasyRoundScoreState> _parseKboRoundScoreStates(dynamic raw) {
           .toList()
         ..sort((a, b) => a.round.compareTo(b.round));
   return parsed;
+}
+
+List<_FantasyTeamPlayer> _resolvedKboRoundStarterPlayers(
+  _FantasyTeamState team,
+  _KboFantasyRoundScoreState state,
+) {
+  if (state.starterPlayers.isNotEmpty) {
+    return state.starterPlayers;
+  }
+
+  final identityOrder = state.starterBaselines.keys.toList(growable: false);
+  if (identityOrder.isEmpty) {
+    return team.starting;
+  }
+
+  final byIdentity = <String, _FantasyTeamPlayer>{};
+  for (final player in [...team.roster, ...team.starting, ...team.bench]) {
+    byIdentity.putIfAbsent(_fantasyTeamPlayerIdentity(player), () => player);
+  }
+
+  final resolved = <_FantasyTeamPlayer>[];
+  for (final identity in identityOrder) {
+    final player = byIdentity[identity];
+    if (player != null) {
+      resolved.add(player);
+    }
+  }
+  return resolved.isNotEmpty ? resolved : team.starting;
 }
 
 bool _shouldFreezeUnlockedKboRoundScore(
@@ -3209,10 +3572,20 @@ double? _kboUnlockedRoundScoreSnapshotForTeam(
   required int round,
   DateTime? now,
 }) {
-  if (!_shouldFreezeUnlockedKboRoundScore(draft, round, now: now)) {
-    return null;
+  final state = _kboRoundScoreStateForTeam(team, round);
+  final snapshot = state?.unlockedScoreSnapshot;
+  if (snapshot == null) return null;
+
+  final currentTime = now ?? DateTime.now();
+  final currentRound = _currentFantasyRoundAt(draft, currentTime);
+  if (round < currentRound) {
+    return snapshot;
   }
-  return _kboRoundScoreStateForTeam(team, round)?.unlockedScoreSnapshot;
+  if (_kboFantasyRoundAllGamesTerminal(draft, round, now: currentTime) ||
+      _shouldFreezeUnlockedKboRoundScore(draft, round, now: currentTime)) {
+    return snapshot;
+  }
+  return null;
 }
 
 List<_FantasyTeamState> _parseFantasyTeams(
@@ -3276,6 +3649,237 @@ List<_FantasyScheduleMatchup> _parseFantasySchedule(dynamic raw) {
     if (roundCompare != 0) return roundCompare;
     return a.homeTeam.compareTo(b.homeTeam);
   });
+}
+
+_JoinedDraft _normalizeJoinedDraftFantasyParticipants(_JoinedDraft draft) {
+  if (draft.fantasyTeams.isEmpty &&
+      draft.fantasySchedule.isEmpty &&
+      draft.draftOrder.isEmpty) {
+    return draft;
+  }
+
+  final uidCandidatesByName = <String, Set<String>>{};
+
+  void registerCandidate(String teamName, String uid) {
+    final normalizedUid = uid.trim();
+    final normalizedName = _normalizedFantasyIdentityText(teamName);
+    if (normalizedUid.isEmpty || normalizedName.isEmpty) return;
+    uidCandidatesByName.putIfAbsent(normalizedName, () => <String>{});
+    uidCandidatesByName[normalizedName]!.add(normalizedUid);
+  }
+
+  for (final entry in draft.draftOrder) {
+    registerCandidate(entry.displayName, entry.uid);
+  }
+  for (final team in draft.fantasyTeams) {
+    registerCandidate(team.teamName, team.uid);
+  }
+  for (final matchup in draft.fantasySchedule) {
+    registerCandidate(matchup.homeTeam, matchup.homeUid);
+    registerCandidate(matchup.awayTeam, matchup.awayUid);
+  }
+
+  String resolvedUidForName(String teamName) {
+    final candidates =
+        uidCandidatesByName[_normalizedFantasyIdentityText(teamName)] ??
+        const <String>{};
+    if (candidates.length != 1) return '';
+    return candidates.first;
+  }
+
+  var changed = false;
+  final updatedDraftOrder = draft.draftOrder.map((entry) {
+    if (entry.uid.trim().isNotEmpty) return entry;
+    final resolvedUid = resolvedUidForName(entry.displayName);
+    if (resolvedUid.isEmpty) return entry;
+    changed = true;
+    return _DraftOrderEntry(
+      uid: resolvedUid,
+      displayName: entry.displayName,
+      slot: entry.slot,
+    );
+  }).toList();
+
+  final updatedFantasyTeams = draft.fantasyTeams.map((team) {
+    if (team.uid.trim().isNotEmpty) return team;
+    final resolvedUid = resolvedUidForName(team.teamName);
+    if (resolvedUid.isEmpty) return team;
+    changed = true;
+    return _FantasyTeamState(
+      uid: resolvedUid,
+      teamName: team.teamName,
+      roster: team.roster,
+      starting: team.starting,
+      bench: team.bench,
+      captainName: team.captainName,
+      viceCaptainName: team.viceCaptainName,
+      captainPlayerId: team.captainPlayerId,
+      viceCaptainPlayerId: team.viceCaptainPlayerId,
+      kboRoundScoreStates: team.kboRoundScoreStates,
+    );
+  }).toList();
+
+  final updatedFantasySchedule = draft.fantasySchedule.map((matchup) {
+    final nextHomeUid = matchup.homeUid.trim().isNotEmpty
+        ? matchup.homeUid
+        : resolvedUidForName(matchup.homeTeam);
+    final nextAwayUid = matchup.awayUid.trim().isNotEmpty
+        ? matchup.awayUid
+        : resolvedUidForName(matchup.awayTeam);
+    if (nextHomeUid == matchup.homeUid && nextAwayUid == matchup.awayUid) {
+      return matchup;
+    }
+    changed = true;
+    return _FantasyScheduleMatchup(
+      round: matchup.round,
+      homeUid: nextHomeUid,
+      homeTeam: matchup.homeTeam,
+      awayUid: nextAwayUid,
+      awayTeam: matchup.awayTeam,
+    );
+  }).toList();
+
+  if (!changed) return draft;
+  return _JoinedDraft(
+    leagueId: draft.leagueId,
+    leagueName: draft.leagueName,
+    when: draft.when,
+    isSoccer: draft.isSoccer,
+    teamCount: draft.teamCount,
+    roundCount: draft.roundCount,
+    memberCount: draft.memberCount,
+    inviteCode: draft.inviteCode,
+    ownerId: draft.ownerId,
+    draftOrder: updatedDraftOrder,
+    fantasyReady: draft.fantasyReady,
+    fantasyTeams: updatedFantasyTeams,
+    fantasySchedule: updatedFantasySchedule,
+    draftBoard: draft.draftBoard,
+  );
+}
+
+_JoinedDraft _mergeLocalKboRoundScoreSnapshots(
+  _JoinedDraft incoming,
+  _JoinedDraft? existing,
+) {
+  if (incoming.isSoccer || existing == null || existing.isSoccer) {
+    return incoming;
+  }
+
+  final existingTeamsByIdentity = <String, _FantasyTeamState>{
+    for (final team in existing.fantasyTeams)
+      _fantasyTeamIdentity(uid: team.uid, teamName: team.teamName): team,
+  };
+  var changed = false;
+
+  final updatedTeams = incoming.fantasyTeams.map((team) {
+    final teamIdentity = _fantasyTeamIdentity(
+      uid: team.uid,
+      teamName: team.teamName,
+    );
+    final existingTeam =
+        existingTeamsByIdentity[teamIdentity] ??
+        existingTeamsByIdentity[team.teamName];
+    if (existingTeam == null || existingTeam.kboRoundScoreStates.isEmpty) {
+      return team;
+    }
+
+    final incomingStatesByRound = <int, _KboFantasyRoundScoreState>{
+      for (final state in team.kboRoundScoreStates) state.round: state,
+    };
+    final existingStatesByRound = <int, _KboFantasyRoundScoreState>{
+      for (final state in existingTeam.kboRoundScoreStates) state.round: state,
+    };
+    final allRounds = <int>{
+      ...incomingStatesByRound.keys,
+      ...existingStatesByRound.keys,
+    }..removeWhere((round) => round <= 0);
+
+    final mergedStates = <_KboFantasyRoundScoreState>[];
+    var teamChanged = false;
+    for (final round in allRounds.toList()..sort()) {
+      final incomingState = incomingStatesByRound[round];
+      final existingState = existingStatesByRound[round];
+      if (incomingState == null && existingState != null) {
+        mergedStates.add(existingState);
+        teamChanged = true;
+        continue;
+      }
+      if (incomingState == null) continue;
+      if (existingState == null) {
+        mergedStates.add(incomingState);
+        continue;
+      }
+
+      final needsSnapshot =
+          incomingState.unlockedScoreSnapshot == null &&
+          existingState.unlockedScoreSnapshot != null;
+      final needsPlayers =
+          incomingState.starterPlayers.isEmpty &&
+          existingState.starterPlayers.isNotEmpty;
+      final needsDoubled =
+          (incomingState.doubledPlayerId?.trim().isEmpty ?? true) &&
+          (existingState.doubledPlayerId?.trim().isNotEmpty ?? false);
+      if (!needsSnapshot && !needsPlayers && !needsDoubled) {
+        mergedStates.add(incomingState);
+        continue;
+      }
+      teamChanged = true;
+      mergedStates.add(
+        _KboFantasyRoundScoreState(
+          round: incomingState.round,
+          bankedScore: incomingState.bankedScore,
+          starterBaselines: incomingState.starterBaselines,
+          starterPlayers: needsPlayers
+              ? existingState.starterPlayers
+              : incomingState.starterPlayers,
+          doubledPlayerId: needsDoubled
+              ? existingState.doubledPlayerId
+              : incomingState.doubledPlayerId,
+          updatedAt: incomingState.updatedAt,
+          unlockedScoreSnapshot: needsSnapshot
+              ? existingState.unlockedScoreSnapshot
+              : incomingState.unlockedScoreSnapshot,
+          unlockedAt: incomingState.unlockedAt ?? existingState.unlockedAt,
+        ),
+      );
+    }
+
+    if (!teamChanged) {
+      return team;
+    }
+    changed = true;
+    return _FantasyTeamState(
+      uid: team.uid,
+      teamName: team.teamName,
+      roster: team.roster,
+      starting: team.starting,
+      bench: team.bench,
+      captainName: team.captainName,
+      viceCaptainName: team.viceCaptainName,
+      captainPlayerId: team.captainPlayerId,
+      viceCaptainPlayerId: team.viceCaptainPlayerId,
+      kboRoundScoreStates: mergedStates,
+    );
+  }).toList();
+
+  if (!changed) return incoming;
+  return _JoinedDraft(
+    leagueId: incoming.leagueId,
+    leagueName: incoming.leagueName,
+    when: incoming.when,
+    isSoccer: incoming.isSoccer,
+    teamCount: incoming.teamCount,
+    roundCount: incoming.roundCount,
+    memberCount: incoming.memberCount,
+    inviteCode: incoming.inviteCode,
+    ownerId: incoming.ownerId,
+    draftOrder: incoming.draftOrder,
+    fantasyReady: incoming.fantasyReady,
+    fantasyTeams: updatedTeams,
+    fantasySchedule: incoming.fantasySchedule,
+    draftBoard: incoming.draftBoard,
+  );
 }
 
 List<List<_PlayerSlot?>> _parseDraftBoard(
@@ -3371,29 +3975,54 @@ const List<String> _kboDraftClubs = [
   '키움',
 ];
 
-const String _kboDraftPlayerDirectoryAsset =
-    'functions/kbo_players_season_2026.txt';
+const String _kboDraftPlayerDirectoryAsset = 'docs/kbo_players_season_2026.txt';
 
 List<_PlayerSlot>? _kboDraftPlayerPoolCache;
 Future<List<_PlayerSlot>>? _kboDraftPlayerPoolFuture;
 
 String _normalizeKboDraftClub(String value) {
   switch (value.trim()) {
+    case 'Twins':
+    case '트윈스':
+      return 'LG';
+    case 'Wiz':
+    case '위즈':
+      return 'KT';
     case 'Samsung':
     case 'SAMSUNG':
+    case 'Lions':
+    case '라이온즈':
       return '삼성';
     case 'Doosan':
     case 'DOOSAN':
+    case 'Bears':
+    case '베어스':
       return '두산';
     case 'Lotte':
     case 'LOTTE':
+    case 'Giants':
+    case '자이언츠':
       return '롯데';
     case 'Hanwha':
     case 'HANWHA':
+    case 'Eagles':
+    case '이글스':
       return '한화';
     case 'Kiwoom':
     case 'KIWOOM':
+    case 'Heroes':
+    case '히어로즈':
       return '키움';
+    case 'Tiger':
+    case 'Tigers':
+    case '타이거즈':
+      return 'KIA';
+    case 'Dinos':
+    case '다이노스':
+      return 'NC';
+    case 'Landers':
+    case '랜더스':
+      return 'SSG';
     default:
       return value.trim();
   }
@@ -3867,6 +4496,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
   bool _isMenuOpen = false;
   bool _isMyPageOpen = false;
   bool _isLoggedIn = false;
+  bool _isSigningOut = false;
   String _lastAvatarCacheAuthUid = '';
   bool _hasSoccerLeague = false;
   bool _hasBaseballLeague = false;
@@ -4222,6 +4852,17 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
         starterBaselines: Map<String, double>.from(
           existingState?.starterBaselines ?? const <String, double>{},
         ),
+        starterPlayers: existingState?.starterPlayers.isNotEmpty == true
+            ? existingState!.starterPlayers
+            : team.starting,
+        doubledPlayerId:
+            existingState?.doubledPlayerId?.trim().isNotEmpty == true
+            ? existingState!.doubledPlayerId
+            : _effectiveCaptainDoublePlayerIdForKboTeam(
+                team,
+                draft: updatedDraft,
+                round: round,
+              ),
         updatedAt: now.toUtc(),
         unlockedScoreSnapshot: _fantasyTeamRoundScore(
           team,
@@ -4514,6 +5155,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
       _sanitizeSelectedHomeLeagues();
     });
     _startDraftTimer();
+    _primePublicFantasyDisplayNamesForDrafts(restoredDrafts);
     _listenJoinedDrafts();
     await _saveLocalState();
   }
@@ -4552,30 +5194,35 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
         if (when == null) continue;
         final isSoccer = map['isSoccer'] != false;
         result.add(
-          _JoinedDraft(
-            leagueId: '${map['leagueId'] ?? ''}',
-            leagueName: '${map['leagueName'] ?? 'My League'}',
-            when: when,
-            isSoccer: isSoccer,
-            teamCount: map['teamCount'] is int
-                ? map['teamCount'] as int
-                : int.tryParse('${map['teamCount'] ?? 8}') ?? 8,
-            roundCount: map['roundCount'] is int
-                ? map['roundCount'] as int
-                : int.tryParse('${map['roundCount'] ?? 1}') ?? 1,
-            memberCount: map['memberCount'] is int
-                ? map['memberCount'] as int
-                : int.tryParse('${map['memberCount'] ?? 1}') ?? 1,
-            inviteCode: '${map['inviteCode'] ?? ''}',
-            ownerId: '${map['ownerId'] ?? ''}',
-            draftOrder: _parseDraftOrder(map['draftOrder']),
-            fantasyReady: map['fantasyReady'] == true,
-            fantasyTeams: _parseFantasyTeams(
-              map['fantasyTeams'],
+          _normalizeJoinedDraftFantasyParticipants(
+            _JoinedDraft(
+              leagueId: '${map['leagueId'] ?? ''}',
+              leagueName: '${map['leagueName'] ?? 'My League'}',
+              when: when,
               isSoccer: isSoccer,
+              teamCount: map['teamCount'] is int
+                  ? map['teamCount'] as int
+                  : int.tryParse('${map['teamCount'] ?? 8}') ?? 8,
+              roundCount: map['roundCount'] is int
+                  ? map['roundCount'] as int
+                  : int.tryParse('${map['roundCount'] ?? 1}') ?? 1,
+              memberCount: map['memberCount'] is int
+                  ? map['memberCount'] as int
+                  : int.tryParse('${map['memberCount'] ?? 1}') ?? 1,
+              inviteCode: '${map['inviteCode'] ?? ''}',
+              ownerId: '${map['ownerId'] ?? ''}',
+              draftOrder: _parseDraftOrder(map['draftOrder']),
+              fantasyReady: map['fantasyReady'] == true,
+              fantasyTeams: _parseFantasyTeams(
+                map['fantasyTeams'],
+                isSoccer: isSoccer,
+              ),
+              fantasySchedule: _parseFantasySchedule(map['fantasySchedule']),
+              draftBoard: _parseDraftBoard(
+                map['draftBoard'],
+                isSoccer: isSoccer,
+              ),
             ),
-            fantasySchedule: _parseFantasySchedule(map['fantasySchedule']),
-            draftBoard: _parseDraftBoard(map['draftBoard'], isSoccer: isSoccer),
           ),
         );
       }
@@ -4597,7 +5244,41 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
       return;
     }
     if (!value) {
-      unawaited(authController.signOut());
+      unawaited(signOutAndReturnHome());
+    }
+  }
+
+  void _applyLoggedOutHomeState() {
+    _hasSoccerLeague = false;
+    _hasBaseballLeague = false;
+    _draftTime = null;
+    _draftLeagueName = null;
+    _draftRemaining = Duration.zero;
+    _joinedDrafts = const [];
+    _isMenuOpen = false;
+    _isMyPageOpen = false;
+  }
+
+  Future<void> signOutAndReturnHome() async {
+    if (_isSigningOut) return;
+    _isSigningOut = true;
+    try {
+      await authController.signOut();
+    } finally {
+      if (mounted) {
+        _draftTimer?.cancel();
+        _joinedDraftsSub?.cancel();
+        setState(() {
+          _isLoggedIn = false;
+          _applyLoggedOutHomeState();
+        });
+        resetHomeUI();
+        Navigator.of(
+          context,
+          rootNavigator: true,
+        ).popUntil((route) => route.isFirst);
+      }
+      _isSigningOut = false;
     }
   }
 
@@ -4713,7 +5394,65 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     applyFantasyDisplayNameForUser(uid: uid, teamName: teamName);
   }
 
+  void _primePublicFantasyDisplayNamesForDrafts(Iterable<_JoinedDraft> drafts) {
+    final uids = <String>{};
+    for (final draft in drafts) {
+      for (final entry in draft.draftOrder) {
+        final uid = entry.uid.trim();
+        if (uid.isNotEmpty) uids.add(uid);
+      }
+      for (final team in draft.fantasyTeams) {
+        final uid = team.uid.trim();
+        if (uid.isNotEmpty) uids.add(uid);
+      }
+      for (final matchup in draft.fantasySchedule) {
+        final homeUid = matchup.homeUid.trim();
+        final awayUid = matchup.awayUid.trim();
+        if (homeUid.isNotEmpty) uids.add(homeUid);
+        if (awayUid.isNotEmpty) uids.add(awayUid);
+      }
+    }
+
+    for (final uid in uids) {
+      unawaited(
+        _ensurePublicProfileDisplayNameLoaded(uid)
+            .then((_) {
+              if (!mounted) return;
+              final displayName = _cachedPublicFantasyDisplayNameForUid(uid);
+              if (displayName.isEmpty) return;
+
+              final needsUpdate = _joinedDrafts.any(
+                (draft) =>
+                    draft.draftOrder.any(
+                      (entry) =>
+                          entry.uid == uid && entry.displayName != displayName,
+                    ) ||
+                    draft.fantasyTeams.any(
+                      (team) => team.uid == uid && team.teamName != displayName,
+                    ) ||
+                    draft.fantasySchedule.any(
+                      (matchup) =>
+                          (matchup.homeUid == uid &&
+                              matchup.homeTeam != displayName) ||
+                          (matchup.awayUid == uid &&
+                              matchup.awayTeam != displayName),
+                    ),
+              );
+              if (!needsUpdate) return;
+              applyFantasyDisplayNameForUser(uid: uid, teamName: displayName);
+            })
+            .catchError((error, stackTrace) {
+              debugPrint(
+                'primePublicFantasyDisplayNamesForDrafts failed (uid=$uid): $error',
+              );
+              debugPrint('$stackTrace');
+            }),
+      );
+    }
+  }
+
   void _upsertJoinedDraft(_JoinedDraft draft) {
+    draft = _normalizeJoinedDraftFantasyParticipants(draft);
     final next = List<_JoinedDraft>.from(_joinedDrafts);
     final idx = next.indexWhere(
       (d) =>
@@ -4723,7 +5462,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
           (d.leagueName == draft.leagueName && d.isSoccer == draft.isSoccer),
     );
     if (idx >= 0) {
-      next[idx] = draft;
+      next[idx] = _mergeLocalKboRoundScoreSnapshots(draft, next[idx]);
     } else {
       next.add(draft);
     }
@@ -4797,27 +5536,41 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                   (e) => '$e',
                 ),
               );
-              final draft = _JoinedDraft(
-                leagueId: doc.id,
-                leagueName: name,
-                when: when,
-                isSoccer: isSoccer,
-                teamCount: _parseTeamCount(data),
-                roundCount: _parseRoundCount(data, isSoccer, when),
-                memberCount: members.length,
-                inviteCode: '${data['inviteCode'] ?? ''}',
-                ownerId: '${data['ownerId'] ?? ''}',
-                draftOrder: _parseDraftOrder(data['draftOrder']),
-                fantasyReady: data['fantasyReady'] == true,
-                fantasyTeams: _parseFantasyTeams(
-                  data['fantasyTeams'],
+              final remoteDraft = _normalizeJoinedDraftFantasyParticipants(
+                _JoinedDraft(
+                  leagueId: doc.id,
+                  leagueName: name,
+                  when: when,
                   isSoccer: isSoccer,
+                  teamCount: _parseTeamCount(data),
+                  roundCount: _parseRoundCount(data, isSoccer, when),
+                  memberCount: members.length,
+                  inviteCode: '${data['inviteCode'] ?? ''}',
+                  ownerId: '${data['ownerId'] ?? ''}',
+                  draftOrder: _parseDraftOrder(data['draftOrder']),
+                  fantasyReady: data['fantasyReady'] == true,
+                  fantasyTeams: _parseFantasyTeams(
+                    data['fantasyTeams'],
+                    isSoccer: isSoccer,
+                  ),
+                  fantasySchedule: _parseFantasySchedule(
+                    data['fantasySchedule'],
+                  ),
+                  draftBoard: _parseDraftBoard(
+                    data['draftBoard'],
+                    isSoccer: isSoccer,
+                  ),
                 ),
-                fantasySchedule: _parseFantasySchedule(data['fantasySchedule']),
-                draftBoard: _parseDraftBoard(
-                  data['draftBoard'],
-                  isSoccer: isSoccer,
-                ),
+              );
+              final existingDraft = _joinedDrafts
+                  .cast<_JoinedDraft?>()
+                  .firstWhere(
+                    (draft) => draft?.leagueId == remoteDraft.leagueId,
+                    orElse: () => null,
+                  );
+              final draft = _mergeLocalKboRoundScoreSnapshots(
+                remoteDraft,
+                existingDraft,
               );
               drafts.add(draft);
             }
@@ -4876,6 +5629,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
               _sanitizeSelectedHomeLeagues();
               _setPrimaryDraftFromJoinedDrafts();
             });
+            _primePublicFantasyDisplayNamesForDrafts(activeDrafts);
             unawaited(_refreshFantasySoccerScores());
             unawaited(_refreshVisibleHomeKboRoundPoints());
             for (final draft in canceledUnfilledDrafts) {
@@ -5292,6 +6046,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     final currentAuthUid = _activeProfileAvatarUid();
     if (_lastAvatarCacheAuthUid != currentAuthUid) {
       _clearPublicProfileAvatarUrlCache();
+      _clearPublicProfileDisplayNameCache();
       _lastAvatarCacheAuthUid = currentAuthUid;
     }
     if (_isLoggedIn == v) {
@@ -5320,14 +6075,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
       unawaited(_ensureProfileAvatarPathLoaded(uid: ''));
       // When logging out, clear league/draft state (same behavior as before).
       setState(() {
-        _hasSoccerLeague = false;
-        _hasBaseballLeague = false;
-        _draftTime = null;
-        _draftLeagueName = null;
-        _draftRemaining = Duration.zero;
-        _joinedDrafts = const [];
-        _isMenuOpen = false;
-        _isMyPageOpen = false;
+        _applyLoggedOutHomeState();
       });
       _draftTimer?.cancel();
       _joinedDraftsSub?.cancel();
@@ -5488,7 +6236,9 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                 ? 0
                 : (a.isSoccer ? -1 : 1);
             if (leagueCompare != 0) return leagueCompare;
-            final clubCompare = a.meta.club.compareTo(b.meta.club);
+            final clubCompare = _homeSearchSuggestionClubLabel(
+              a,
+            ).compareTo(_homeSearchSuggestionClubLabel(b));
             if (clubCompare != 0) return clubCompare;
             return a.meta.position.compareTo(b.meta.position);
           });
@@ -5986,7 +6736,6 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                                                 itemBuilder: (_, i) {
                                                   final suggestion =
                                                       _suggestions[i];
-                                                  final meta = suggestion.meta;
                                                   final isDark =
                                                       Theme.of(
                                                         context,
@@ -6014,7 +6763,9 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                                                       ),
                                                     ),
                                                     subtitle: Text(
-                                                      meta.club,
+                                                      _homeSearchSuggestionClubLabel(
+                                                        suggestion,
+                                                      ),
                                                       maxLines: 1,
                                                       overflow:
                                                           TextOverflow.ellipsis,
@@ -6189,7 +6940,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     final qLower = trimmed.toLowerCase();
     for (final suggestion in _playerDirectory) {
       if (suggestion.name.toLowerCase().contains(qLower) ||
-          suggestion.meta.club.toLowerCase().contains(qLower)) {
+          _homeSearchSuggestionMatchesClub(suggestion, qLower)) {
         return suggestion;
       }
     }
@@ -6236,7 +6987,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
         .where(
           (entry) =>
               entry.name.toLowerCase().contains(qLower) ||
-              entry.meta.club.toLowerCase().contains(qLower),
+              _homeSearchSuggestionMatchesClub(entry, qLower),
         )
         .toList();
     setState(() {
