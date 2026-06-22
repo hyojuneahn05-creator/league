@@ -92,31 +92,19 @@ class _PrivacyPolicyPageState extends State<PrivacyPolicyPage> {
               child: Container(color: Colors.black.withOpacity(0.35)),
             ),
 
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeOutBack,
-            top: _isMyPageOpen ? 100 : 20,
-            right: _isMyPageOpen ? 24 : 12,
-            child: AnimatedScale(
-              duration: const Duration(milliseconds: 400),
-              scale: _isMyPageOpen ? 1.0 : 0.2,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 250),
-                opacity: _isMyPageOpen ? 1 : 0,
-                child: MyPageCard(
-                  isLoggedIn: homeKey.currentState?.isLoggedIn ?? false,
-                  onLogin: () {
-                    homeKey.currentState?.updateLogin(true);
-                    Navigator.pop(context);
-                  },
-                  onLogout: () {
-                    homeKey.currentState?.updateLogin(false);
-                    homeKey.currentState?.closePanels();
-                    Navigator.pop(context);
-                  },
-                ),
-              ),
-            ),
+          _MyPagePopupOverlay(
+            isOpen: _isMyPageOpen,
+            onDismiss: _toggleMyPage,
+            isLoggedIn: homeKey.currentState?.isLoggedIn ?? false,
+            onLogin: () {
+              homeKey.currentState?.updateLogin(true);
+              Navigator.pop(context);
+            },
+            onLogout: () {
+              homeKey.currentState?.updateLogin(false);
+              homeKey.currentState?.closePanels();
+              Navigator.pop(context);
+            },
           ),
         ],
       ),

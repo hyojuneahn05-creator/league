@@ -182,7 +182,7 @@ Lee Kun-Hee | 이건희 | Gimcheon Sangmu FC | Forward | 9
 Jung Jae-Min | 정재민 | Gimcheon Sangmu FC | Forward | 57
 
 Park Cheong-Hyo | 박청효 | Gangwon FC | Goalkeeper | 1
-Kim Jung-Hoon | 김정훈 | Gangwaon FC | Goalkeeper | 21
+Kim Jung-Hoon | 김정훈 | Gangwon FC | Goalkeeper | 21
 Cho Min-Kyu | 조민규 | Gangwon FC | Goalkeeper | 51
 Hong Jin-Hyeok | 홍진혁 | Gangwon FC | Goalkeeper | 31
 Kim Yu-Sung | 김유성 | Gangwon FC | Goalkeeper | 41
@@ -239,10 +239,10 @@ Kim Ye-Sung | 김예성 | Pohang Steelers | Defender | 3
 Eo Jeong-Won | 어정원 | Pohang Steelers | Defender | 2
 Kang Min-Jun | 강민준 | Pohang Steelers | Defender | 13
 Shin Kwang-Hoon | 신광훈 | Pohang Steelers | Defender | 17
+Kim Ho-Jin | 김호진 | Pohang Steelers | Defender | 36
 Lee Chang-Woo | 이창우 | Pohang Steelers | Midfielder | 14
 K. Nishiya | 켄토 | Pohang Steelers | Midfielder | 31
 Ki Sung-yeung | 기성용 | Pohang Steelers | Midfielder | 40
-Kim Ho-Jin | 김호진 | Pohang Steelers | Midfielder | 36
 Kim Beom-Jun | 김범준 | Pohang Steelers | Midfielder | 26
 Kim Dong-Jin | 김동진 | Pohang Steelers | Midfielder | 16
 Kim Seung-Ho | 김승호 | Pohang Steelers | Midfielder | 8

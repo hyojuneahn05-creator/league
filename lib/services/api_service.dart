@@ -17,6 +17,7 @@ class ApiService {
   static const String kboMatchDetailsUrl =
       'https://us-central1-leagueit-e6a05.cloudfunctions.net/getKboMatchDetails';
   static const int targetSeason = 2026;
+  static const List<int> _retryableStatusCodes = <int>[429, 500, 502, 503, 504];
   static const Map<String, String> _kLeagueApiTeamNames = {
     '부천FC 1995': 'Bucheon FC 1995',
     '강원 FC': 'Gangwon FC',
@@ -24,6 +25,7 @@ class ApiService {
     '대전 하나 시티즌': 'Daejeon Citizen',
     '광주 FC': 'Gwangju FC',
     '제주 유나이티드': 'Jeju United FC',
+    '제주 SK': 'Jeju United FC',
     '전북 현대 모터스': 'Jeonbuk Motors',
     '인천 유나이티드': 'Incheon United',
     '포항 스틸러스': 'Pohang Steelers',
@@ -32,11 +34,42 @@ class ApiService {
     '김천 상무': 'Gimcheon Sangmu FC',
   };
 
-  static Future<Map<String, dynamic>> fetchLeagueData() async {
-    final response = await http.get(Uri.parse(baseUrl));
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load league data (${response.statusCode})');
+  static Future<http.Response> _getWithRetry(
+    Uri uri, {
+    int maxAttempts = 3,
+  }) async {
+    http.Response? lastResponse;
+    Object? lastError;
+    for (var attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        final response = await http
+            .get(uri)
+            .timeout(const Duration(seconds: 12));
+        if (response.statusCode == 200) {
+          return response;
+        }
+        lastResponse = response;
+        if (!_retryableStatusCodes.contains(response.statusCode) ||
+            attempt == maxAttempts - 1) {
+          break;
+        }
+      } catch (error) {
+        lastError = error;
+        if (attempt == maxAttempts - 1) rethrow;
+      }
+      await Future<void>.delayed(Duration(milliseconds: 350 * (attempt + 1)));
     }
+    if (lastResponse != null) {
+      throw Exception('Request failed (${lastResponse.statusCode})');
+    }
+    if (lastError != null) {
+      throw Exception('Request failed ($lastError)');
+    }
+    throw Exception('Request failed');
+  }
+
+  static Future<Map<String, dynamic>> fetchLeagueData() async {
+    final response = await _getWithRetry(Uri.parse(baseUrl));
 
     final decoded = jsonDecode(response.body);
     if (decoded is! Map<String, dynamic>) {
@@ -63,12 +96,7 @@ class ApiService {
     final uri = Uri.parse(
       teamStatisticsUrl,
     ).replace(queryParameters: {'team': apiTeamName});
-    final response = await http.get(uri);
-    if (response.statusCode != 200) {
-      throw Exception(
-        'Failed to load team statistics (${response.statusCode})',
-      );
-    }
+    final response = await _getWithRetry(uri);
 
     final decoded = jsonDecode(response.body);
     if (decoded is! Map<String, dynamic>) {
@@ -82,26 +110,16 @@ class ApiService {
     final uri = Uri.parse(
       fixtureDetailsUrl,
     ).replace(queryParameters: {'fixture': '$fixtureId'});
-    final response = await http.get(uri);
-    if (response.statusCode != 200) {
-      throw Exception(
-        'Failed to load fixture details (${response.statusCode})',
-      );
-    }
-
+    final response = await _getWithRetry(uri);
     final decoded = jsonDecode(response.body);
     if (decoded is! Map<String, dynamic>) {
       throw Exception('Invalid fixture details response format');
     }
-
     return decoded;
   }
 
   static Future<Map<String, dynamic>> fetchKboLeagueData() async {
-    final response = await http.get(Uri.parse(kboLeagueDataUrl));
-    if (response.statusCode != 200) {
-      throw Exception('Failed to load KBO data (${response.statusCode})');
-    }
+    final response = await _getWithRetry(Uri.parse(kboLeagueDataUrl));
 
     final decoded = jsonDecode(response.body);
     if (decoded is! Map<String, dynamic>) {
@@ -118,16 +136,18 @@ class ApiService {
     return decoded;
   }
 
-  static Future<Map<String, dynamic>> fetchKboMatchDetails(int matchId) async {
+  static Future<Map<String, dynamic>> fetchKboMatchDetails(
+    int matchId, {
+    int? fantasyRound,
+  }) async {
+    final queryParameters = <String, String>{'match': '$matchId'};
+    if (fantasyRound != null && fantasyRound > 0) {
+      queryParameters['round'] = '$fantasyRound';
+    }
     final uri = Uri.parse(
       kboMatchDetailsUrl,
-    ).replace(queryParameters: {'match': '$matchId'});
-    final response = await http.get(uri);
-    if (response.statusCode != 200) {
-      throw Exception(
-        'Failed to load KBO match details (${response.statusCode})',
-      );
-    }
+    ).replace(queryParameters: queryParameters);
+    final response = await _getWithRetry(uri);
 
     final decoded = jsonDecode(response.body);
     if (decoded is! Map<String, dynamic>) {

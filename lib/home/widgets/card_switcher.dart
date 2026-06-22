@@ -6,6 +6,7 @@ class CardSwitcher extends StatefulWidget {
   final bool isLoggedIn;
   final bool hasSoccerLeague;
   final bool hasBaseballLeague;
+  final bool frontLeagueIsSoccer;
   final ValueChanged<bool>? onFrontLeagueChanged;
 
   const CardSwitcher({
@@ -13,6 +14,7 @@ class CardSwitcher extends StatefulWidget {
     required this.isLoggedIn,
     required this.hasSoccerLeague,
     required this.hasBaseballLeague,
+    required this.frontLeagueIsSoccer,
     this.onFrontLeagueChanged,
   });
 
@@ -42,9 +44,15 @@ class _CardSwitcherState extends State<CardSwitcher>
     return begin + (end - begin) * t;
   }
 
+  void _syncFrontLeague(bool isSoccer) {
+    _front = isSoccer ? LeagueCard.kLeague : LeagueCard.kbo;
+    _back = isSoccer ? LeagueCard.kbo : LeagueCard.kLeague;
+  }
+
   @override
   void initState() {
     super.initState();
+    _syncFrontLeague(widget.frontLeagueIsSoccer);
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 360),
@@ -83,6 +91,18 @@ class _CardSwitcherState extends State<CardSwitcher>
   }
 
   @override
+  void didUpdateWidget(covariant CardSwitcher oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.frontLeagueIsSoccer == widget.frontLeagueIsSoccer) return;
+    if (_controller.isAnimating) return;
+    setState(() {
+      dragX = 0.0;
+      _pendingSwitch = false;
+      _syncFrontLeague(widget.frontLeagueIsSoccer);
+    });
+  }
+
+  @override
   void dispose() {
     _controller.dispose();
     super.dispose();
@@ -111,10 +131,15 @@ class _CardSwitcherState extends State<CardSwitcher>
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final frameWidth = max(284.0, screenWidth - 44.0);
+    final mediaSize = MediaQuery.sizeOf(context);
+    final screenWidth = mediaSize.width;
+    final bool isTabletLayout = mediaSize.shortestSide >= 700;
+    final double frameWidth = min(
+      max(284.0, screenWidth - 44.0),
+      isTabletLayout ? 600.0 : double.infinity,
+    );
     final cardWidth = frameWidth - peek;
-    final cardHeight = cardWidth * 0.62;
+    final cardHeight = cardWidth * (isTabletLayout ? 0.54 : 0.62);
     final double m = dragX.abs();
     final double progress = (m / switchThreshold).clamp(0.0, 1.0);
     bool hasLeagueFor(bool isSoccer) =>
@@ -169,18 +194,26 @@ class _CardSwitcherState extends State<CardSwitcher>
       );
     }
 
-    Future<void> openFor(bool isSoccer) async {
+    Future<void> openFor(bool isSoccer, _FantasyMatchupView? matchup) async {
+      if (!widget.isLoggedIn) {
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CreateLeaguePage(isSoccer: isSoccer),
+          ),
+        );
+        return;
+      }
       final fantasyDraft = widget.isLoggedIn && hasLeagueFor(isSoccer)
           ? homeKey.currentState?.fantasyDraftForSport(isSoccer)
           : null;
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => MatchDetailPage(
-            isSoccer: isSoccer,
-            draft: fantasyDraft,
-            initialSection: _MatchSection.matchup,
-          ),
+        _matchDetailPageRoute(
+          isSoccer: isSoccer,
+          draft: fantasyDraft,
+          initialSection: _MatchSection.matchup,
+          preferredFantasyRound: matchup?.round,
         ),
       );
     }
@@ -234,7 +267,7 @@ class _CardSwitcherState extends State<CardSwitcher>
                 isSoccer: backSoccer,
                 showMatchUp: showMatchUpBack,
                 matchup: backMatchup,
-                onStart: () => openFor(backSoccer),
+                onStart: () => openFor(backSoccer, backMatchup),
               ),
             ),
             scale: backScale,
@@ -254,7 +287,7 @@ class _CardSwitcherState extends State<CardSwitcher>
                 isSoccer: frontSoccer,
                 showMatchUp: showMatchUpFront,
                 matchup: frontMatchup,
-                onStart: () => openFor(frontSoccer),
+                onStart: () => openFor(frontSoccer, frontMatchup),
               ),
             ),
           ),

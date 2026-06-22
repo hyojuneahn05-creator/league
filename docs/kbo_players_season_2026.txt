@@ -1,6 +1,6 @@
 Han Junsu | 한준수 | KIA | Catcher | 25
 Ju Hyosang | 주효상 | KIA | Catcher | 22
-Jarryd Dale | 데일 | KIA | Infielder | 32
+Kim Taegoon | 김태군 | KIA | Catcher | 42
 Jeong Hyeonchang | 정현창 | KIA | Infielder | 12
 Kim Doyeong | 김도영 | KIA | Infielder | 5
 Kim Gyuseong | 김규성 | KIA | Infielder | 14
@@ -9,14 +9,19 @@ Park Min | 박민 | KIA | Infielder | 2
 Yoon Dohyun | 윤도현 | KIA | Infielder | 16
 Park Sangjun | 박상준 | KIA | Infielder | 50
 Oh Seonwoo | 오선우 | KIA | Infielder | 56
-Harold Castro | 카스트로 | KIA | Center Fielder | 26
+Byeon Woohyeok | 변우혁 | KIA | Infielder | 29
+Hwang Daein | 황대인 | KIA | Infielder | 34
+Harold Castro | 카스트로 | KIA | Outfielder | 26
+Kim Mingyu | 김민규 | KIA | Outfielder | 37
 Kim Horyeong | 김호령 | KIA | Outfielder | 27
 Ko Jongwook | 고종욱 | KIA | Outfielder | 57
 Na Seongbeom | 나성범 | KIA | Outfielder | 47
 Park Jaehyun | 박재현 | KIA | Outfielder | 15
 Park Jeongwoo | 박정우 | KIA | Outfielder | 1
+Han Seungyeon | 한승연 | KIA | Outfielder | 31
 Adam Oller | 올러 | KIA | Pitcher | 33
 Han Jaeseung | 한재승 | KIA | Pitcher | 55
+Kwak Dogyu | 곽도규 | KIA | Pitcher | 0
 Hong Gunhee | 홍건희 | KIA | Pitcher | 52
 Hong Mingyu | 홍민규 | KIA | Pitcher | 67
 Hwang Dongha | 황동하 | KIA | Pitcher | 41
@@ -28,24 +33,24 @@ Kim Taehyung | 김태형 | KIA | Pitcher | 10
 Lee Euilee | 이의리 | KIA | Pitcher | 48
 Lee Taeyang | 이태양 | KIA | Pitcher | 44
 Seong Youngtak | 성영탁 | KIA | Pitcher | 65
+Lee Hyeongbeom | 이형범 | KIA | Pitcher | 28
 Yang Hyunjong | 양현종 | KIA | Pitcher | 54
 Choi Jimin | 최지민 | KIA | Pitcher | 39
 Kim Geonguk | 김건국 | KIA | Pitcher | 43
 Jung Haeyoung | 정해영 | KIA | Pitcher | 62
-Yoo Seungcheol |  | KIA | Pitcher | 0
+Ji Hyun | 지현 | KIA | Pitcher | 32
+Keisho Shirakawa | 시라카와 | KIA | Pitcher | 63
 Yoon Joonghyun |  | KIA | Pitcher | 0
 Yoon Youngcheol |  | KIA | Pitcher | 0
 Yu Jiseong |  | KIA | Pitcher | 0
 Lee Hojin |  | KIA | Pitcher | 0
 Lee Homin |  | KIA | Pitcher | 0
-Lee Hyeongbeom |  | KIA | Pitcher | 0
 Lee Joonyoung |  | KIA | Pitcher | 0
 Lee Seongwon |  | KIA | Pitcher | 0
 Lee Seungjae |  | KIA | Pitcher | 0
 Na Yeonwoo |  | KIA | Pitcher | 0
 Oh Kyuseok |  | KIA | Pitcher | 0
 Kim Yangsoo |  | KIA | Pitcher | 0
-Kwak Dogyu |  | KIA | Pitcher | 0
 Lee Dohyun |  | KIA | Pitcher | 0
 Kim Kyungmook |  | KIA | Pitcher | 0
 Kim Saeil |  | KIA | Pitcher | 0
@@ -64,20 +69,16 @@ Jang Mingi |  | KIA | Pitcher | 0
 Jeon Sanghyun |  | KIA | Pitcher | 0
 Jeong Chanhwa |  | KIA | Pitcher | 0
 Jeong Dahun |  | KIA | Pitcher | 0
-Ji Hyun |  | KIA | Pitcher | 0
 Jo Geonho |  | KIA | Pitcher | 0
 Choi Geonhee |  | KIA | Pitcher | 0
 Choi Yuchan |  | KIA | Pitcher | 0
-Kim Taegoon |  | KIA | Catcher | 0
 Kwon Hyeokgyung |  | KIA | Catcher | 0
 Lee Dohoon |  | KIA | Catcher | 0
 Sin Myeongseung |  | KIA | Catcher | 0
-Byeon Woohyeok |  | KIA | Infielder | 0
 Cha Sanghyun |  | KIA | Infielder | 0
 Choi Jeongyong |  | KIA | Infielder | 0
 Eom Junhyun |  | KIA | Infielder | 0
 Han Junhee |  | KIA | Infielder | 0
-Hwang Daein |  | KIA | Infielder | 0
 Hwang Seokmin |  | KIA | Infielder | 0
 Jang Sihyeon |  | KIA | Infielder | 0
 Jung Haewon |  | KIA | Infielder | 0
@@ -87,8 +88,6 @@ Lee Junbeom |  | KIA | Infielder | 0
 Park Jonghyuk |  | KIA | Infielder | 0
 Song Hojung |  | KIA | Infielder | 0
 Cheon Jeongmin |  | KIA | Outfielder | 0
-Han Seungyeon |  | KIA | Outfielder | 0
-Kim Mingyu |  | KIA | Outfielder | 0
 Kim Minsoo |  | KIA | Outfielder | 0
 Kim Seokhwan |  | KIA | Outfielder | 0
 Kwak Donghyo |  | KIA | Outfielder | 0
@@ -97,6 +96,10 @@ Lee Youngjae |  | KIA | Outfielder | 0
 Park Heon |  | KIA | Outfielder | 0
 Oh Jeonghwan |  | KIA | Second baseman | 0
 
+Yoo Seungcheol |  | KIA | Pitcher | 0
+
+
+Jarryd Dale | 데일 | KIA | Infielder | 32
 
 Ahn Hyunmin | 안현민 | KT | Catcher | 23
 Han Seungtaek | 한승택 | KT | Catcher | 45
@@ -113,6 +116,7 @@ Kang Minseong | 강민성 | KT | Infielder | 5
 Jang Joonwon | 장준원 | KT | Infielder | 56
 Bae Jeongdae | 배정대 | KT | Outfielder | 27
 Choi Wonjoon | 최원준 | KT | Outfielder | 3
+Jang Jinhyuk | 장진혁 | KT | Outfielder | 51
 Kim Hyunsoo | 김현수 | KT | Outfielder | 10
 Lee Jeonghoon | 이정훈 | KT | Outfielder | 33
 Sam Hilliard | 힐리어드 | KT | Outfielder | 34
@@ -128,9 +132,14 @@ Kouki Sugimoto | 스기모토 | KT | Pitcher | 11
 Matt Sauer | 사우어 | KT | Pitcher | 32
 Oh Wonseok | 오원석 | KT | Pitcher | 47
 Park Yeonghyeon | 박영현 | KT | Pitcher | 60
+Bae Jeseong | 배제성 | KT | Pitcher | 19
 So Hyeongjun | 소형준 | KT | Pitcher | 30
 Son Donghyeon | 손동현 | KT | Pitcher | 41
 Woo Kyumin | 우규민 | KT | Pitcher | 12
+Kim Jeongwoon | 김정운 | KT | Pitcher | 61
+Lee Sangdong | 이상동 | KT | Pitcher | 37
+Moon Yongik | 문용익 | KT | Pitcher | 18
+Han Seungju | 한승주 | KT | Pitcher | 59
 Cho Daehyeon |  | KT | Catcher | 0
 Kim Minseok |  | KT | Catcher | 0
 Kim Yubin |  | KT | Catcher | 0
@@ -145,14 +154,12 @@ Park Seongjun |  | KT | Infielder | 0
 Son Minseok |  | KT | Infielder | 0
 Choi Donghee |  | KT | Outfielder | 0
 Choi Seongmin |  | KT | Outfielder | 0
-Jang Jinhyuk |  | KT | Outfielder | 0
 Jeong Yeongung |  | KT | Outfielder | 0
 Kim Kyunghwan |  | KT | Outfielder | 0
 Lee Jaewon |  | KT | Outfielder | 0
 Moon Sangcheol |  | KT | Outfielder | 0
 Park Minseok |  | KT | Outfielder | 0
 An Insan |  | KT | Pitcher | 0
-Bae Jeseong |  | KT | Pitcher | 0
 Cho Ihyeon |  | KT | Pitcher | 0
 Choi Donghwan |  | KT | Pitcher | 0
 Go Junhyeok |  | KT | Pitcher | 0
@@ -168,7 +175,6 @@ Kim Geonung |  | KT | Pitcher | 0
 Kim Gyuhan |  | KT | Pitcher | 0
 Kim Huiyeon |  | KT | Pitcher | 0
 Kim Jaewon |  | KT | Pitcher | 0
-Kim Jeongwoon |  | KT | Pitcher | 0
 Kim Taeo |  | KT | Pitcher | 0
 Kwon Hyojun |  | KT | Pitcher | 0
 Kwon Sungjun |  | KT | Pitcher | 0
@@ -177,11 +183,9 @@ Lee Hyeonmin |  | KT | Pitcher | 0
 Lee Joonmyung |  | KT | Pitcher | 0
 Lee Junghyun |  | KT | Pitcher | 0
 Lee Minjun |  | KT | Pitcher | 0
-Lee Sangdong |  | KT | Pitcher | 0
 Lee Sangwoo |  | KT | Pitcher | 0
 Lee Wonjae |  | KT | Pitcher | 0
 Lim Junhyeung |  | KT | Pitcher | 0
-Moon Yongik |  | KT | Pitcher | 0
 Park Geonwoo |  | KT | Pitcher | 0
 Park Jihoon |  | KT | Pitcher | 0
 Park Junhyeok |  | KT | Pitcher | 0
@@ -199,8 +203,12 @@ Lee Yeongbin | 이영빈 | LG | Infielder | 7
 Moon Bokyeong | 문보경 | LG | Infielder | 2
 Oh Jihwan | 오지환 | LG | Infielder | 10
 Shin Minjae | 신민재 | LG | Infielder | 4
+Moon Jeongbin | 문정빈 | LG | Infielder | 56
+Son Yungjun | 손용준 | LG | Infielder | 15
+Kang Minkyun | 강민균 | LG | Infielder | 00
 Choi Wonyeong | 최원영 | LG | Outfielder | 3
 Hong Changgi | 홍창기 | LG | Outfielder | 51
+Kim Hyunjong | 김현종 | LG | Outfielder | 66
 Lee Jaewon | 이재원 | LG | Outfielder | 52
 Moon Seongju | 문성주 | LG | Outfielder | 8
 Park Haemin | 박해민 | LG | Outfielder | 17
@@ -223,6 +231,13 @@ Lachlan Wells | 웰스 | LG | Pitcher | 68
 Kim Donghyun | 김동현 | LG | Pitcher | 43
 Cho Geonhee | 조건희 | LG | Pitcher | 48
 Park Siwon | 박시원 | LG | Pitcher | 58
+Bae Jaejun | 배재준 | LG | Pitcher | 25
+Kim Kangryul | 김강률 | LG | Pitcher | 37
+Kim Daehyun | 김대현 | LG | Pitcher | 12
+Daniel Rios | 리오스 | LG | Pitcher | 46
+Kim Yunsik | 김윤식 | LG | Pitcher | 47
+Son Juyeong | 손주영 | LG | Pitcher | 29
+Lee Sangyung | 이상영 | LG | Pitcher | 39
 Jun Gyeongwon |  | LG | Catcher | 0
 Kang Minki |  | LG | Catcher | 0
 Kim Juntae |  | LG | Catcher | 0
@@ -231,26 +246,21 @@ Lee Hanrim |  | LG | Catcher | 0
 Park Junki |  | LG | Catcher | 0
 Eom Taekyoung |  | LG | Infielder | 0
 Joo Junghwan |  | LG | Infielder | 0
-Kang Minkyun |  | LG | Infielder | 0
 Kim Jeongyul |  | LG | Infielder | 0
 Kim Joosung |  | LG | Infielder | 0
 Kim Sungjin |  | LG | Infielder | 0
 Kwak Minho |  | LG | Infielder | 0
 Lee Jibaek |  | LG | Infielder | 0
 Lee Taehoon |  | LG | Infielder | 0
-Moon Jeongbin |  | LG | Infielder | 0
-Son Yungjun |  | LG | Infielder | 0
 Song Daehyun |  | LG | Infielder | 0
 Woo Jungan |  | LG | Infielder | 0
 Ham Changgeon |  | LG | Outfielder | 0
-Kim Hyunjong |  | LG | Outfielder | 0
 Kwon Dongyeok |  | LG | Outfielder | 0
 Lee Junseo |  | LG | Outfielder | 0
 Park Hyeonwoo |  | LG | Outfielder | 0
 Park Kwanwoo |  | LG | Outfielder | 0
 Seo Yeoungjun |  | LG | Outfielder | 0
 An Sihoo |  | LG | Pitcher | 0
-Bae Jaejun |  | LG | Pitcher | 0
 Baek Seunghyun |  | LG | Pitcher | 0
 Cho Chuhyeon |  | LG | Pitcher | 0
 Cho Wontae |  | LG | Pitcher | 0
@@ -260,23 +270,19 @@ Heo Junhyeok |  | LG | Pitcher | 0
 Jang Shihwan |  | LG | Pitcher | 0
 Jin Wooyeong |  | LG | Pitcher | 0
 Jung Wooyeong |  | LG | Pitcher | 0
-Kim Daehyun |  | LG | Pitcher | 0
 Kim Jiyong |  | LG | Pitcher | 0
 Kim Jongun |  | LG | Pitcher | 0
 Kim Juon |  | LG | Pitcher | 0
-Kim Kangryul |  | LG | Pitcher | 0
 Kwon Woojun |  | LG | Pitcher | 0
 Lee Jigang |  | LG | Pitcher | 0
 Lee Jongjun |  | LG | Pitcher | 0
 Lee Minho |  | LG | Pitcher | 0
 Lee Miteum |  | LG | Pitcher | 0
-Lee Sangyung |  | LG | Pitcher | 0
 Lee Woochan |  | LG | Pitcher | 0
 Lim Jungkyun |  | LG | Pitcher | 0
 Park Junseong |  | LG | Pitcher | 0
 Park Myeonggeun |  | LG | Pitcher | 0
 Park Seongjin |  | LG | Pitcher | 0
-Son Juyeong |  | LG | Pitcher | 0
 Sung Junseo |  | LG | Pitcher | 0
 Won Sanghoon |  | LG | Pitcher | 0
 Woo Myeonghyeon |  | LG | Pitcher | 0
@@ -308,10 +314,12 @@ Park Kunwoo | 박건우 | NC | Outfielder | 37
 Go Junhwi | 고준휘 | NC | Outfielder | 49
 Park Siwon | 박시원 | NC | Outfielder | 55
 Kwon Heedong | 권희동 | NC | Outfielder | 36
+Oh Janghan | 오장한 | NC | Outfielder | 65
 Bae Jaehwan | 배재환 | NC | Pitcher | 61
 Chun Samin | 전사민 | NC | Pitcher | 57
 Curtis Taylor | 테일러 | NC | Pitcher | 66
 Drew VerHagen | 버하겐 | NC | Pitcher | 28
+Kim Taegyeong | 김태경 | NC | Pitcher | 60
 Kim Jinho | 김진호 | NC | Pitcher | 54
 Kim Younggyu | 김영규 | NC | Pitcher | 17
 Koo Changmo | 구창모 | NC | Pitcher | 59
@@ -323,6 +331,11 @@ Ryou Jinoug | 류진욱 | NC | Pitcher | 41
 Shin Minhyuk | 신민혁 | NC | Pitcher | 18
 Lim Jeongho | 임정호 | NC | Pitcher | 30
 Won Jonghae | 원종해| NC | Pitcher | 63
+Choi Sungyoung | 최성영 | NC | Pitcher | 26
+Lee Yongjun | 이용준 | NC | Pitcher | 48
+Shin Yeongwoo | 신영우 | NC | Pitcher | 43
+Song Myunggi | 송명기 | NC | Pitcher | 45
+Choi Yohan | 최요한 | NC | Pitcher | 67
 Kim Donghyun |  | NC | Catcher | 0
 Lee Heeseong |  | NC | Catcher | 0
 Park Sungjae |  | NC | Catcher | 0
@@ -344,13 +357,10 @@ Bae Sangho |  | NC | Outfielder | 0
 Jo Changyeon |  | NC | Outfielder | 0
 Kim Beomjun |  | NC | Outfielder | 0
 Ko Seungwan |  | NC | Outfielder | 0
-Oh Janghan |  | NC | Outfielder | 0
 Park Youngbin |  | NC | Outfielder | 0
 Yang Gaonsol |  | NC | Outfielder | 0
 Cho Minsuk |  | NC | Pitcher | 0
-Choi Sungyoung |  | NC | Pitcher | 0
 Choi Wooseok |  | NC | Pitcher | 0
-Choi Yohan |  | NC | Pitcher | 0
 Choi Yunhyeok |  | NC | Pitcher | 0
 Hong Jaemoon |  | NC | Pitcher | 0
 Jeon Changmin |  | NC | Pitcher | 0
@@ -361,7 +371,6 @@ Kang Taegyeong |  | NC | Pitcher | 0
 Kim Jaeyeol |  | NC | Pitcher | 0
 Kim Junwon |  | NC | Pitcher | 0
 Kim Nokwon |  | NC | Pitcher | 0
-Kim Taegyeong |  | NC | Pitcher | 0
 Kim Taehoon |  | NC | Pitcher | 0
 Kim Taehyun |  | NC | Pitcher | 0
 Kim Taewoo |  | NC | Pitcher | 0
@@ -371,8 +380,7 @@ Lee Semin |  | NC | Pitcher | 0
 Noh Jaewon |  | NC | Pitcher | 0
 Park Dongsoo |  | NC | Pitcher | 0
 Park Jihan |  | NC | Pitcher | 0
-Riley Thompson |  | NC | Pitcher | 0
-Shin Yeongwoo |  | NC | Pitcher | 0
+Riley Thompson | 라일리 | NC | Pitcher | 3
 Soi Hyeon |  | NC | Pitcher | 0
 Son Joohwan |  | NC | Pitcher | 0
 Son Minseo |  | NC | Pitcher | 0
@@ -383,6 +391,7 @@ Yun Seonghwan |  | NC | Pitcher | 0
 Jo Hyeongwoo | 조형우 | SSG | Catcher | 20
 Lee Jiyoung | 이지영 | SSG | Catcher | 56
 Kim Minsik | 김민식 | SSG | Catcher | 24
+Shin Beomsoo | 신범수 | SSG | Catcher | 25
 Choi Jeong | 최정 | SSG | Infielder | 14
 Hong Daein | 홍대인 | SSG | Infielder | 97
 Jeong Junjae | 정준재 | SSG | Infielder | 3
@@ -391,6 +400,8 @@ Park Sunghan | 박성한 | SSG | Infielder | 2
 Seok Jeungwoo | 석정우 | SSG | Infielder | 52
 An Sanghyeon | 안상현 | SSG | Infielder | 10
 Choi Joonwoo | 최준우 | SSG | Infielder | 7
+Jeon Uisan | 전의산 | SSG | Infielder | 47
+Choi Yunseok | 최윤석 | SSG | Infielder | 65
 Chae Hyunwoo | 채현우 | SSG | Outfielder | 15
 Choi Jihoon | 최지훈 | SSG | Outfielder | 54
 Guillermo Heredia | 에레디아 | SSG | Outfielder | 27
@@ -407,6 +418,8 @@ Jeon Yeongjun | 전영준 | SSG | Pitcher | 28
 Jeong Dongyoon | 정동윤 | SSG | Pitcher | 51
 Jo Byeonghyeon | 조병현 | SSG | Pitcher | 19
 Kim Keonwoo | 김건우 | SSG | Pitcher | 39
+Choi Yongjun | 최용준 | SSG | Pitcher | 67
+Kim Minjun | 김민준 | SSG | Pitcher | 40
 Kim Min | 김민 | SSG | Pitcher | 1
 Lee Rowoon | 이로운 | SSG | Pitcher | 92
 Mitch White | 화이트 | SSG | Pitcher | 55
@@ -415,12 +428,15 @@ Noh Kyungeun | 노경은 | SSG | Pitcher | 38
 Park Sihoo | 박시후 | SSG | Pitcher | 57
 Lee Kisoon | 이기순 | SSG | Pitcher | 4
 Shota Takeda | 타케다 | SSG | Pitcher | 23
+Kim Dohyun | 김도현 | SSG | Pitcher | 61
+Lee Geonwook | 이건욱 | SSG | Pitcher | 16
+Lee Juneki | 이준기 | SSG | Pitcher | 90
+Shin Sangyeon | 신상연 | SSG | Pitcher | 00
+Thomas Hatch | 해치 | SSG | Pitcher | 55
 Hyun Wonhwe |  | SSG | Catcher | 0
 Kim Kyumin |  | SSG | Catcher | 0
 Kim Minbeom |  | SSG | Catcher | 0
 Lee Yulye |  | SSG | Catcher | 0
-Shin Beomsoo |  | SSG | Catcher | 0
-Choi Yunseok |  | SSG | Infielder | 0
 Jaeyeon Ahn |  | SSG | Infielder | 0
 Jang Hyunjin |  | SSG | Infielder | 0
 Kim Minjun |  | SSG | Infielder | 0
@@ -447,23 +463,18 @@ Byun Geonwoo |  | SSG | Pitcher | 0
 Cheon Beomseok |  | SSG | Pitcher | 0
 Cho Yohan |  | SSG | Pitcher | 0
 Jo Jaewoo |  | SSG | Pitcher | 0
-Kim Dohyun |  | SSG | Pitcher | 0
 Kim Hyunjae |  | SSG | Pitcher | 0
 Kim Jaehoon |  | SSG | Pitcher | 0
 Kim Joonyoung |  | SSG | Pitcher | 0
 Kim Junmo |  | SSG | Pitcher | 0
 Choi Suho |  | SSG | Pitcher | 0
-Choi Yongjun |  | SSG | Pitcher | 0
 Ha Jaehoon |  | SSG | Pitcher | 0
 Han Jiheon |  | SSG | Pitcher | 0
 Kim Kwanghyun |  | SSG | Pitcher | 0
-Kim Minjun |  | SSG | Pitcher | 0
 Kim Taehyun |  | SSG | Pitcher | 0
 Kim Taekhyung |  | SSG | Pitcher | 0
 Lee Dowoo |  | SSG | Pitcher | 0
-Lee Geonwook |  | SSG | Pitcher | 0
 Lee Juhyung |  | SSG | Pitcher | 0
-Lee Juneki |  | SSG | Pitcher | 0
 Park Jonghoon |  | SSG | Pitcher | 0
 Park Kiho |  | SSG | Pitcher | 0
 Park Myeonghyeon |  | SSG | Pitcher | 0
@@ -471,7 +482,6 @@ Park Sanghoo |  | SSG | Pitcher | 0
 Ryu Hyungon |  | SSG | Pitcher | 0
 Seo Jinyong |  | SSG | Pitcher | 0
 Shin Jihwan |  | SSG | Pitcher | 0
-Shin Sangyeon |  | SSG | Pitcher | 0
 Song Yeongjin |  | SSG | Pitcher | 0
 Yun Seongbo |  | SSG | Pitcher | 0
 Yun Taehyeon |  | SSG | Pitcher | 0
@@ -491,6 +501,7 @@ Im Jongsung | 임종성 | 두산 | Infielder | 3
 Oh Myungjin | 오명진 | 두산 | Infielder | 6
 Daz Cameron | 카메론 | 두산 | Outfielder | 24
 Jeong Soobin | 정수빈 | 두산 | Outfielder | 31
+Kim Daehan | 김대한 | 두산 | Outfielder | 32
 Jo Soohaeng | 조수행 | 두산 | Outfielder | 51
 Kim Intae | 김인태 | 두산 | Outfielder | 33
 Kim Minseok | 김민석 | 두산 | Outfielder | 2
@@ -513,6 +524,12 @@ Choi Jikang | 최지강 | 두산 | Pitcher | 42
 Choi Junho | 최준호 | 두산 | Pitcher | 59
 Wes Benjamin | 벤자민 | 두산 | Pitcher | 25
 Chris Flexen | 플렉센 | 두산 | Pitcher | 77
+Park Chiguk | 박치국 | 두산 | Pitcher | 1
+Choi Joohyung | 최주형 | 두산 | Pitcher | 15
+Kim Hanjoong | 김한중 | 두산 | Pitcher | 95
+Lee Juyeop | 이주엽 | 두산 | Pitcher | 43
+Kim Dongju | 김동주 | 두산 | Pitcher | 4
+Takuto Takada | 타카다 | 두산 | Pitcher | 12
 Cheon Hyeonjae |  | 두산 | Catcher | 0
 Jang Gyubin |  | 두산 | Catcher | 0
 Kim Seongjae |  | 두산 | Catcher | 0
@@ -526,13 +543,11 @@ Kim Junsang |  | 두산 | Infielder | 0
 Kim Minhyeok |  | 두산 | Infielder | 0
 Lee Seonwoo |  | 두산 | Infielder | 0
 Nam Taewoong |  | 두산 | Infielder | 0
-Park Gyebeom |  | 두산 | Infielder | 0
 Shin Minchul |  | 두산 | Infielder | 0
 Sim Geonbo |  | 두산 | Infielder | 0
 Hong Seongho |  | 두산 | Outfielder | 0
 Jeon Damin |  | 두산 | Outfielder | 0
 Joo Yangjun |  | 두산 | Outfielder | 0
-Kim Daehan |  | 두산 | Outfielder | 0
 Kim Dongjun |  | 두산 | Outfielder | 0
 Kim Joooh |  | 두산 | Outfielder | 0
 Kim Munsu |  | 두산 | Outfielder | 0
@@ -543,7 +558,6 @@ Yang Hyeonjin |  | 두산 | Outfielder | 0
 Ahn Chiho |  | 두산 | Pitcher | 0
 Ahn Mingyeom |  | 두산 | Pitcher | 0
 Choi Jongin |  | 두산 | Pitcher | 0
-Choi Joohyung |  | 두산 | Pitcher | 0
 Choi Wonjoon |  | 두산 | Pitcher | 0
 Choi Wooin |  | 두산 | Pitcher | 0
 Hwang Heecheon |  | 두산 | Pitcher | 0
@@ -551,7 +565,6 @@ Jang Woojin |  | 두산 | Pitcher | 0
 Je Hwanyu |  | 두산 | Pitcher | 0
 Jeong Seongheon |  | 두산 | Pitcher | 0
 Jung Eunjae |  | 두산 | Pitcher | 0
-Kim Hanjoong |  | 두산 | Pitcher | 0
 Kim Hojun |  | 두산 | Pitcher | 0
 Kim Jiyun |  | 두산 | Pitcher | 0
 Kim Mingyu |  | 두산 | Pitcher | 0
@@ -559,10 +572,8 @@ Kim Myeongsin |  | 두산 | Pitcher | 0
 Kim Yuseong |  | 두산 | Pitcher | 0
 Lee Gyohoon |  | 두산 | Pitcher | 0
 Lee Juho |  | 두산 | Pitcher | 0
-Lee Juyeop |  | 두산 | Pitcher | 0
 Lee Kiseok |  | 두산 | Pitcher | 0
 Lim Jonghoon |  | 두산 | Pitcher | 0
-Park Chiguk |  | 두산 | Pitcher | 0
 Park Woong |  | 두산 | Pitcher | 0
 Seo Junoh |  | 두산 | Pitcher | 0
 
@@ -570,6 +581,7 @@ Seo Junoh |  | 두산 | Pitcher | 0
 Son Seongbin | 손성빈 | 롯데 | Catcher | 28
 Yoo Kangnam | 유강남 | 롯데 | Catcher | 27
 Jo Bogeun | 정보근 | 롯데 | Catcher | 42
+Park Jaeyeop | 박재엽 | 롯데 | Catcher | 26
 Han Donghui | 한동희 | 롯데 | Infielder | 25
 Han Taeyang | 한태양 | 롯데 | Infielder | 6
 Jeon Minjae | 전민재 | 롯데 | Infielder | 13
@@ -580,12 +592,17 @@ Park Seungwook | 박승욱 | 롯데 | Infielder | 53
 Shin Yongsu | 신윤후 | 롯데 | Infielder | 3
 Son Hoyoung | 손호영 | 롯데 | Infielder | 33
 Lee Seojun | 이서준 | 롯데 | Infielder | 63
+Na Seungyeup | 나승엽 | 롯데 | Infielder | 51
+Choi Hang | 최항 | 롯데 | Infielder | 14
+Kim Semin | 김세민 | 롯데 | Infielder | 5
 Hwang Seongbin | 황성빈 | 롯데 | Outfielder | 0
 Jang Duseong | 장두성 | 롯데 | Outfielder | 7
 Jeon Junwoo | 전준우 | 롯데 | Outfielder | 8
 Victor Reyes | 레이예스 | 롯데 | Outfielder | 29
 Yoon Donghee | 윤동희 | 롯데 | Outfielder | 91
 Kim Hanhol | 김한홀 | 롯데 | Outfielder | 95
+Kim Donghyeok | 김동혁 | 롯데 | Outfielder | 50
+Jo Sejin | 조세진 | 롯데 | Outfielder | 12
 Choi Keon | 최이준 | 롯데 | Pitcher | 49
 Choi Junyong | 최준용 | 롯데 | Pitcher | 56
 Elvin Rodriguez | 로드리게즈 | 롯데 | Pitcher | 31
@@ -594,14 +611,21 @@ Jeong Cheolwon | 정철원 | 롯데 | Pitcher | 65
 Jeremy Beasley | 비슬리 | 롯데 | Pitcher | 23
 Kim Jinuk | 김진욱 | 롯데 | Pitcher | 15
 Kim Wonjoong | 김원중 | 롯데 | Pitcher | 34
+Kim Changhoon | 김창훈 | 롯데 | Pitcher | 66
 Masaya Kyoyama | 쿄야마 | 롯데 | Pitcher | 48
+Jung Sungjong | 정성종 | 롯데 | Pitcher | 18
 Na Kyunan | 나균안 | 롯데 | Pitcher | 43
+Kim Kijun | 김기준 | 롯데 | Pitcher | 47
 Park Jeongmin | 박정민 | 롯데 | Pitcher | 36
 Park Joonwoo | 박준우 | 롯데 | Pitcher | 58
 Park Sewoong | 박세웅 | 롯데 | Pitcher | 21
 Kim Kanghyun | 김강현 | 롯데 | Pitcher | 19
 Ko Seungmin | 구승민 | 롯데 | Pitcher | 22
 Lee Yeongjae | 이영재 | 롯데 | Pitcher | 40
+Jeong Hyeonsu | 정현수 | 롯데 | Pitcher | 57
+Lee Jinha | 이진하 | 롯데 | Pitcher | 45
+Lee Minseok | 이민석 | 롯데 | Pitcher | 37
+Hong Minki | 홍민기 | 롯데 | Pitcher | 38
 Eum Jangyoon |  | 롯데 | Catcher | 0
 Ha Junseo |  | 롯데 | Catcher | 0
 Jeong Moonhyeok |  | 롯데 | Catcher | 0
@@ -609,26 +633,21 @@ Kang Seunggu |  | 롯데 | Catcher | 0
 Kim Hyundo |  | 롯데 | Catcher | 0
 Lee Kunhee |  | 롯데 | Catcher | 0
 Park Geonwoo |  | 롯데 | Catcher | 0
-Park Jaeyeop |  | 롯데 | Catcher | 0
 Seo Haeun |  | 롯데 | Catcher | 0
 Bae Inhyuk |  | 롯데 | Infielder | 0
 Hong Seoyeon |  | 롯데 | Infielder | 0
 Kim Donggyu |  | 롯데 | Infielder | 0
 Kim Hobeom |  | 롯데 | Infielder | 0
-Kim Semin |  | 롯데 | Infielder | 0
 Ko Seungmin |  | 롯데 | Infielder | 0
 Lee Jeongmin |  | 롯데 | Infielder | 0
 Lee Jihoon |  | 롯데 | Infielder | 0
 Lee Rohwa |  | 롯데 | Infielder | 0
 Lee Taekyung |  | 롯데 | Infielder | 0
-Na Seungyeup |  | 롯데 | Infielder | 0
 Park Chanhyung |  | 롯데 | Infielder | 0
 Park Jihoon |  | 롯데 | Infielder | 0
 Han Seunghyun |  | 롯데 | Outfielder | 0
 Jo Minyoung |  | 롯데 | Outfielder | 0
-Jo Sejin |  | 롯데 | Outfielder | 0
 Kim Daehyeon |  | 롯데 | Outfielder | 0
-Kim Donghyeok |  | 롯데 | Outfielder | 0
 Kim Donghyun |  | 롯데 | Outfielder | 0
 Lee Inhan |  | 롯데 | Outfielder | 0
 Park Geon |  | 롯데 | Outfielder | 0
@@ -636,28 +655,21 @@ Yun Sunyeong |  | 롯데 | Outfielder | 0
 Choi Chungyeon |  | 롯데 | Pitcher | 0
 Ha Hyeseong |  | 롯데 | Pitcher | 0
 Han Hyunhee |  | 롯데 | Pitcher | 0
-Hong Minki |  | 롯데 | Pitcher | 0
 Jang Sejin |  | 롯데 | Pitcher | 0
-Jeong Hyeonsu |  | 롯데 | Pitcher | 0
 Jeong Seonwoo |  | 롯데 | Pitcher | 0
 Jeong Woojun |  | 롯데 | Pitcher | 0
 Jo Kyungmin |  | 롯데 | Pitcher | 0
 Jo Youngwoo |  | 롯데 | Pitcher | 0
-Jung Sungjong |  | 롯데 | Pitcher | 0
-Kim Changhoon |  | 롯데 | Pitcher | 0
 Kim Hangyeol |  | 롯데 | Pitcher | 0
 Kim Hwajung |  | 롯데 | Pitcher | 0
 Kim Hyunsoo |  | 롯데 | Pitcher | 0
 Kim Juwan |  | 롯데 | Pitcher | 0
-Kim Kijun |  | 롯데 | Pitcher | 0
 Kim Sangsu |  | 롯데 | Pitcher | 0
 Kim Taehyun |  | 롯데 | Pitcher | 0
 Kim Taekyun |  | 롯데 | Pitcher | 0
 Kim Yeongjun |  | 롯데 | Pitcher | 0
 Lee Byungjun |  | 롯데 | Pitcher | 0
-Lee Jinha |  | 롯데 | Pitcher | 0
 Lee Junseo |  | 롯데 | Pitcher | 0
-Lee Minseok |  | 롯데 | Pitcher | 0
 Lee Seungheon |  | 롯데 | Pitcher | 0
 Lee Taeyoun |  | 롯데 | Pitcher | 0
 Nam Haedam |  | 롯데 | Pitcher | 0
@@ -670,22 +682,25 @@ Seok Sangho |  | 롯데 | Pitcher | 0
 Shin Donggeon |  | 롯데 | Pitcher | 0
 Song Jaeyeong |  | 롯데 | Pitcher | 0
 Yoon Seongpin |  | 롯데 | Pitcher | 0
-Choi Hang |  | 롯데 | Second baseman | 0
 
 
 Kang Minho | 강민호 | 삼성 | Catcher | 47
 Park Sehyuk | 박세혁 | 삼성 | Catcher | 52
 Kim Dohwan | 김도환 | 삼성 | Catcher | 24
+Jang Seunghyun | 장승현 | 삼성 | Catcher | 46
 Lewin Díaz | 디아즈 | 삼성 | Infielder | 0
 Jeon Byungwoo | 전병우 | 삼성 | Infielder | 61
 Kim Jaesang | 김재상 | 삼성 | Infielder | 14
 Kim Jichan | 김지찬 | 삼성 | Infielder | 58
 Lee Haeseung | 이해승 | 삼성 | Infielder | 3
 Lee Jaehyeon | 이재현 | 삼성 | Infielder | 7
+Kim Sangjun | 김상준 | 삼성 | Infielder | 56
 Lee Sunggyu | 이성규 | 삼성 | Infielder | 13
 Ryu Jihyeok | 류지혁 | 삼성 | Infielder | 16
 Yang Woohyun | 양우현 | 삼성 | Infielder | 53
 Shim Jaehoon | 심재훈 | 삼성 | Infielder | 6
+Park Gyebeom | 박계범 | 삼성 | Infielder | 9
+Lee Changyong | 이창용 | 삼성 | Infielder | 50
 Kim Youngwoong | 김영웅 | 삼성 | Infielder | 30
 Choi Hyungwoo | 최형우 | 삼성 | Outfielder | 34
 Hong Hyunbin | 홍현빈 | 삼성 | Outfielder | 51
@@ -711,9 +726,9 @@ Yang Changseop | 양창섭 | 삼성 | Pitcher | 42
 Yura Miyaji | 미야지 | 삼성 | Pitcher | 15
 Kim Taehoon | 김태훈 | 삼성 | Pitcher | 27
 Lee Seunghyeon | 이승현 | 삼성 | Pitcher | 57
+Lee Jaehee | 이재희 | 삼성 | Pitcher | 17
 Ahn Minseong |  | 삼성 | Catcher | 0
 Cha Dongyoung |  | 삼성 | Catcher | 0
-Jang Seunghyun |  | 삼성 | Catcher | 0
 Kim Jaeseong |  | 삼성 | Catcher | 0
 Lee Byungheon |  | 삼성 | Catcher | 0
 Lee Seojun |  | 삼성 | Catcher | 0
@@ -722,8 +737,6 @@ Cha Seungjun |  | 삼성 | Infielder | 0
 Jo Minseong |  | 삼성 | Infielder | 0
 Kang Junseo |  | 삼성 | Infielder | 0
 Kang Minseong |  | 삼성 | Infielder | 0
-Kim Sangjun |  | 삼성 | Infielder | 0
-Lee Changyong |  | 삼성 | Infielder | 0
 Lee Hanmin |  | 삼성 | Infielder | 0
 Lim Juchan |  | 삼성 | Infielder | 0
 Park Jangmin |  | 삼성 | Infielder | 0
@@ -757,7 +770,6 @@ Kim Yuhyeon |  | 삼성 | Pitcher | 0
 Kwon Hyunwoo |  | 삼성 | Pitcher | 0
 Lee Hobeom |  | 삼성 | Pitcher | 0
 Lee Hosung |  | 삼성 | Pitcher | 0
-Lee Jaehee |  | 삼성 | Pitcher | 0
 Lee Jaeik |  | 삼성 | Pitcher | 0
 Lee Seojun |  | 삼성 | Pitcher | 0
 Matt Manning |  | 삼성 | Pitcher | 0
@@ -775,6 +787,7 @@ Yook Sunyeop |  | 삼성 | Pitcher | 0
 Kim Geonhee | 김건희 | 키움 | Catcher | 12
 Kim Jaehyun | 김재현 | 키움 | Catcher | 32
 Kim Dongheon | 김동현 | 키움 | Catcher | 44
+Park Sungbin | 박성빈 | 키움 | Catcher | 56
 Trenton Brooks | 브룩스 | 키움 | Infielder | 22
 An Chihong | 안치홍 | 키움 | Infielder | 9
 Choi Joohwan | 최주환 | 키움 | Infielder | 53
@@ -784,8 +797,14 @@ Oh Seonjin | 오선진 | 키움 | Infielder | 6
 Park Hangyeol | 박한결 | 키움 | Infielder | 4
 Yeom Seungwon | 염승원 | 키움 | Infielder | 39
 Choi Jaeyoung | 최재영 | 키움 | Infielder | 38
+Kwon Hyukbin | 권혁빈 | 키움 | Infielder | 00
+Kim Taejin | 김태진 | 키움 | Infielder | 1
 Kim Gunhee | 김건희 | 키움 | Infielder | 12
+Kim Woongbin | 김웅비 | 키움 | Infielder | 10
 Song Jihoo | 송지후 | 키움 | Infielder | 86
+Yeo Dongwook | 여동욱 | 키움 | Infielder | 93
+Keston Hiura | 히우라 | 키움 | Infielder | 22
+Seo Keonchang | 서건창 | 키움 | Infielder | 14
 Eo Junseo | 어준서 | 키움 | Infielder | 92
 Lee Hyeongjong | 이형종 | 키움 | Outfielder | 36
 Lee Joohyung | 이주형 | 키움 | Outfielder | 2
@@ -794,6 +813,8 @@ Park Joohong | 박주홍 | 키움 | Outfielder | 57
 Lim Byeongwuk | 임병욱 | 키움 | Outfielder | 17
 Park Soojong | 박수종 | 키움 | Outfielder | 87
 Choo Jaehyun | 추재현 | 키움 | Outfielder | 27
+Won Seongjun | 원성준 | 키움 | Outfielder | 33
+Park Chaeul | 박채울 | 키움 | Outfielder | 72
 Ahn Woojin | 안우진 | 키움 | Pitcher | 41
 Bae Donghyun | 배동현 | 키움 | Pitcher | 61
 Ha Yeongmin | 하영민 | 키움 | Pitcher | 50
@@ -811,36 +832,32 @@ Won Jonghyeon | 원종현 | 키움 | Pitcher | 46
 Yuto Kanakubo | 유토 | 키움 | Pitcher | 48
 Park Junhyun | 박준현 | 키움 | Pitcher | 18
 Jeon Junpyo | 전준표 | 키움 | Pitcher | 62
+Park Jisung | 박지성 | 키움 | Pitcher | 37
+Jo Younggeon | 조영건 | 키움 | Pitcher | 20
+Kim Seojun | 김서준 | 키움 | Pitcher | 59
+Yun Seokwon | 윤석원 | 키움 | Pitcher | 95
+Kenny Rosenberg | 로젠버그 | 키움 | Pitcher | 30
 Kim Jisung |  | 키움 | Catcher | 0
 Kim Jooyoung |  | 키움 | Catcher | 0
 Kim Rian |  | 키움 | Catcher | 0
 Park Junhyeong |  | 키움 | Catcher | 0
-Park Sungbin |  | 키움 | Catcher | 0
 Jeon Taehyun |  | 키움 | Infielder | 0
 Kim Byeonghwi |  | 키움 | Infielder | 0
-Kim Taejin |  | 키움 | Infielder | 0
-Kim Woongbin |  | 키움 | Infielder | 0
-Kwon Hyukbin |  | 키움 | Infielder | 0
 Lee Jaesang |  | 키움 | Infielder | 0
 Seo Yushin |  | 키움 | Infielder | 0
 Shim Hwiyoon |  | 키움 | Infielder | 0
 Yang Hyeonjong |  | 키움 | Infielder | 0
-Yeo Dongwook |  | 키움 | Infielder | 0
 Yoo Jeongtaek |  | 키움 | Infielder | 0
 Ju Seongwon |  | 키움 | Outfielder | 0
 Lee Yongkyu |  | 키움 | Outfielder | 0
-Park Chaeul |  | 키움 | Outfielder | 0
-Won Seongjun |  | 키움 | Outfielder | 0
 Baek Jinsoo |  | 키움 | Pitcher | 0
 Choi Hyeonwoo |  | 키움 | Pitcher | 0
 Han Minwoo |  | 키움 | Pitcher | 0
 Jeong Dongjun |  | 키움 | Pitcher | 0
 Jeong Hyeonwoo |  | 키움 | Pitcher | 0
-Jo Younggeon |  | 키움 | Pitcher | 0
 Kim Dongkyu |  | 키움 | Pitcher | 0
 Kim Inbeom |  | 키움 | Pitcher | 0
 Kim Joonhyoung |  | 키움 | Pitcher | 0
-Kim Seojun |  | 키움 | Pitcher | 0
 Kim Seongi |  | 키움 | Pitcher | 0
 Kim Seongmin |  | 키움 | Pitcher | 0
 Kim Taeeon |  | 키움 | Pitcher | 0
@@ -854,7 +871,6 @@ Lee Taejun |  | 키움 | Pitcher | 0
 Lee Taeyang |  | 키움 | Pitcher | 0
 Lim Jinmuk |  | 키움 | Pitcher | 0
 Oh Hyeseong |  | 키움 | Pitcher | 0
-Park Jisung |  | 키움 | Pitcher | 0
 Park Jooseong |  | 키움 | Pitcher | 0
 Park Jungeon |  | 키움 | Pitcher | 0
 Park Yoonseong |  | 키움 | Pitcher | 0
@@ -862,8 +878,6 @@ Son Himchan |  | 키움 | Pitcher | 0
 Son Hyeongi |  | 키움 | Pitcher | 0
 Yang Jiyul |  | 키움 | Pitcher | 0
 Yun Hyeon |  | 키움 | Pitcher | 0
-Yun Seokwon |  | 키움 | Pitcher | 0
-Seo Keonchang |  | 키움 | Second baseman | 0
 
 
 Choi Jaehoon | 최재훈 | 한화 | Catcher | 13
@@ -884,6 +898,7 @@ Lee Wonseok | 이원석 | 한화 | Outfielder | 37
 Oh Jaewon | 오재원 | 한화 | Outfielder | 54
 Yonathan Perlaza | 페라자 | 한화 | Outfielder | 30
 Lee Jinyoung | 이진영 | 한화 | Outfielder | 10
+Yu Min | 유민 | 한화 | Outfielder | 65
 Hwang Junseo | 황준서 | 한화 | Pitcher | 29
 Jeong Woojoo | 정우주 | 한화 | Pitcher | 61
 Jo Donguk | 조동욱 | 한화 | Pitcher | 57
@@ -900,6 +915,10 @@ Wilkel Hernandez | 에르난데스 | 한화 | Pitcher | 12
 Jack Cushing | 쿠싱 | 한화 | Pitcher | 60
 Ryu Hyunjin | 류현진 | 한화 | Pitcher | 99
 Kwon Mingyu | 권민규 | 한화 | Pitcher | 64
+Park Junyoung | 박준영 | 한화 | Pitcher | 68
+Owen White | 화이트 | 한화 | Pitcher | 24
+Yoon Sanheum | 윤산흠 | 한화 | Pitcher | 49
+Jang Jisu | 장유호 | 한화 | Pitcher | 28
 Chang Kyuhyun |  | 한화 | Catcher | 0
 Han Jiyoon |  | 한화 | Catcher | 0
 Heo Gwanhoe |  | 한화 | Catcher | 0
@@ -925,13 +944,11 @@ Lee Minjae |  | 한화 | Outfielder | 0
 Lim Jongchan |  | 한화 | Outfielder | 0
 Park Joojin |  | 한화 | Outfielder | 0
 Yoo Rokyeul |  | 한화 | Outfielder | 0
-Yu Min |  | 한화 | Outfielder | 0
 Bae Minseo |  | 한화 | Pitcher | 0
 Eom Sangbaek |  | 한화 | Pitcher | 0
 Ha Dongjun |  | 한화 | Pitcher | 0
 Han Seogu |  | 한화 | Pitcher | 0
 Hwang Heeseong |  | 한화 | Pitcher | 0
-Jang Jisu |  | 한화 | Pitcher | 0
 Joo Hyunsang |  | 한화 | Pitcher | 0
 Jung Yihwang |  | 한화 | Pitcher | 0
 Kang Jaemin |  | 한화 | Pitcher | 0
@@ -943,15 +960,12 @@ Kim Minwoo |  | 한화 | Pitcher | 0
 Kim Seungil |  | 한화 | Pitcher | 0
 Lee Dongyoung |  | 한화 | Pitcher | 0
 Lee Gichang |  | 한화 | Pitcher | 0
-Owen White |  | 한화 | Pitcher | 0
 Park Buseong |  | 한화 | Pitcher | 0
 Park Jaekyu |  | 한화 | Pitcher | 0
-Park Junyoung |  | 한화 | Pitcher | 0
 Won Jonghyeok |  | 한화 | Pitcher | 0
 Yang Gyeongmo |  | 한화 | Pitcher | 0
 Yang Seonryul |  | 한화 | Pitcher | 0
 Yang Suho |  | 한화 | Pitcher | 0
 Yeo Hyeonseung |  | 한화 | Pitcher | 0
-Yoon Sanheum |  | 한화 | Pitcher | 0
 Yosep Eom |  | 한화 | Pitcher | 0
 Jeong Minkyu |  | 한화 | Third baseman | 0

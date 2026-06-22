@@ -1,5 +1,248 @@
 part of '../home_page.dart';
 
+const Map<String, String> _kLeagueRefereeNameMap = {
+  'Dong Jun Lee': '이동준',
+  'Dae-Yong Kim': '김대용',
+  'Hyun Jae Choi': '최현재',
+  'Cheol-Jun Choi': '최철준',
+  'Seol Tae-Hwan': '설태환',
+  'Jong-Hyeok Kim': '김종혁',
+  'Min-seok Song': '송민석',
+  'Yong-jun Shin': '신용준',
+  'Ko Hyung-jin': '고형진',
+  'Byungjin Park': '박병진',
+  'Woo-Sung Kim': '김우성',
+  'Chae Sang-Hyeop': '채상협',
+};
+
+const Map<String, String> _kLeagueVenueNameMap = {
+  'Seoul World Cup Stadium': '서울월드컵경기장',
+  'Sungui Arena Park': '인천축구전용경기장',
+  'Incheon Football Stadium': '인천축구전용경기장',
+  'Jeonju World Cup Stadium': '전주월드컵경기장',
+  'Jeju World Cup Stadium': '제주월드컵경기장',
+  'Daejeon World Cup Stadium': '대전월드컵경기장',
+  'DGB Daegu Bank Park': 'DGB대구은행파크',
+  'Pohang Steel Yard': '포항스틸야드',
+  'Gwangju Football Stadium': '광주축구전용구장',
+  'Gwangju World Cup Stadium': '광주월드컵경기장',
+  'Ulsan Munsu Football Stadium': '울산문수축구경기장',
+  'Ulsan Munsu Stadium': '울산문수축구경기장',
+  'Suwon World Cup Stadium': '수원월드컵경기장',
+  'Suwon Sports Complex': '수원종합운동장',
+  'Gimcheon Stadium': '김천종합운동장',
+  'Gimcheon Sports Complex': '김천종합운동장',
+  'Chuncheon Songam Stadium': '춘천송암스포츠타운',
+  'Chuncheon Songam Sports Town': '춘천송암스포츠타운',
+  'Chuncheon Songam Sports Center': '춘천송암스포츠타운',
+  'Gangneung Stadium': '강릉종합운동장',
+  'Gangneung Sports Complex': '강릉종합운동장',
+  'Anyang Stadium': '안양종합운동장',
+  'Bucheon Stadium': '부천종합운동장',
+  'Bucheon Sports Complex': '부천종합운동장',
+  'Mokdong Stadium': '목동종합운동장',
+  'Asan Yi Sun Shin Stadium': '이순신종합운동장',
+  'Busan Gudeok Stadium': '구덕운동장',
+  'Changwon Football Center': '창원축구센터',
+  'Tancheon Sports Complex': '탄천종합운동장',
+  'Yongin Mireu Stadium': '용인미르스타디움',
+  'Hwaseong Sports Complex': '화성종합경기타운',
+  'Cheonan Stadium': '천안종합운동장',
+};
+
+const Map<String, String> _kboVenueNameMap = {
+  'Jamsil Baseball Stadium': '잠실야구장',
+  'Jamsil Stadium': '잠실야구장',
+  'Gocheok Sky Dome': '고척 스카이돔',
+  'Gocheok SkyDome': '고척 스카이돔',
+  'Suwon KT Wiz Park': '수원KT위즈파크',
+  'KT Wiz Park': '수원KT위즈파크',
+  'Incheon SSG Landers Field': '인천SSG랜더스필드',
+  'SSG Landers Field': '인천SSG랜더스필드',
+  'Daejeon Hanwha Life Eagles Park': '대전한화생명볼파크',
+  'Hanwha Life Eagles Park': '대전한화생명볼파크',
+  'Hanwha Life Insurance Eagles Park': '대전한화생명볼파크',
+  'Daegu Samsung Lions Park': '대구삼성 라이온즈파크',
+  'Samsung Lions Park': '대구삼성 라이온즈파크',
+  'Daegu Baseball Stadium': '대구삼성 라이온즈파크',
+  'Sajik Baseball Stadium': '사직야구장',
+  'Sajik Stadium': '사직야구장',
+  'Busan Sajik Baseball Stadium': '부산사직야구장',
+  'Pohang Baseball Stadium': '포항야구장',
+  'Changwon NC Park': '창원NC파크',
+  'NC Park': '창원NC파크',
+  'Gwangju Kia Champions Field': '광주기아챔피언스필드',
+  'Kia Champions Field': '광주기아챔피언스필드',
+};
+
+const Map<String, String> _kLeagueVenueCityMap = {
+  'Incheon': '인천',
+  'Jeonju': '전주',
+  'Jeju': '제주',
+  'Daegu': '대구',
+  'Pohang': '포항',
+  'Gwangju': '광주',
+  'Ulsan': '울산',
+  'Suwon': '수원',
+  'Gimcheon': '김천',
+  'Chuncheon': '춘천',
+  'Anyang': '안양',
+  'Seoul': '서울',
+  'Asan': '아산',
+  'Busan': '부산',
+  'Changwon': '창원',
+  'Seongnam': '성남',
+  'Yongin': '용인',
+  'Hwaseong': '화성',
+  'Cheonan': '천안',
+};
+
+const Map<String, String> _kLeaguePlayerNameOverridesByClubNumber = {
+  '전북 현대|71': '전지완',
+  '전북 현대|39': '서정혁',
+  '전북 현대|44': '김주형',
+  '전북 현대|55': '최진웅',
+  '전북 현대|47': '이건희',
+  '전북 현대|88': '윤현석',
+  '전북 현대|79': '김창훈',
+  '전북 현대|98': '임준휘',
+  '전북 현대|90': '정상운',
+  '대전 하나 시티즌|77': '주앙 빅토르',
+  '울산 HD|16': '박우진',
+  '울산 HD|33': '장시영',
+  '울산 HD|91': '벤지',
+  '울산 HD|97': '에릭',
+  '울산 HD|20': '정재상',
+  'FC 서울|5': '야잔',
+  '김천 상무|2': '민경현',
+  '김천 상무|15': '임덕근',
+  '김천 상무|22': '이상헌',
+  '강원 FC|27': '김도현',
+  '강원 FC|46': '김어진',
+  '포항 스틸러스|21': '황인제',
+  '포항 스틸러스|31': '켄토',
+  '포항 스틸러스|77': '완델손',
+  '포항 스틸러스|12': '황재환',
+  '포항 스틸러스|34': '백승원',
+  '인천 유나이티드|21': '이태희',
+  '인천 유나이티드|31': '이상현',
+  '인천 유나이티드|2': '이비자',
+  '인천 유나이티드|24': '이준섭',
+  '인천 유나이티드|23': '정치인',
+  '인천 유나이티드|10': '이동률',
+  '인천 유나이티드|72': '이청용',
+  '인천 유나이티드|17': '김성민',
+  '제주 SK|2': '토비아스',
+  '제주 SK|55': '강동휘',
+  '제주 SK|7': '박창준',
+  '제주 SK|19': '김현우',
+  'FC 안양|99': '주현우',
+  'FC 안양|25': '김재현',
+  'FC 안양|37': '김민호',
+  'FC 안양|89': '정준영',
+  'FC 안양|44': '라파엘',
+  'FC 안양|11': '아일톤',
+  'FC 안양|71': '최현우',
+  'FC 안양|47': '김강',
+  '부천 FC 1995|25': '여봉훈',
+  '부천 FC 1995|17': '김규민',
+  '부천 FC 1995|63': '가브리엘',
+  '부천 FC 1995|9': '몬타뇨',
+  '광주 FC|13': '박정인',
+  '광주 FC|30': '안혁주',
+};
+
+const Map<String, String> _kLeaguePlayerNameOverridesByClubNumberAndName = {
+  '울산 HD|23|lee min hyuk': '이민혁',
+  '울산 HD|22|lee min hyuk': '이민혁',
+  '울산 HD|29|jang si young': '장시영',
+  'FC 안양|6|kang ji wan': '강지완',
+  'FC 안양|6|choe gyu hyeon': '최규현',
+};
+
+String _normalizeAsciiWords(String value) {
+  return value
+      .replaceAll(RegExp(r',\s*South Korea$', caseSensitive: false), '')
+      .replaceAll(RegExp(r'[^A-Za-z]+'), ' ')
+      .trim()
+      .toLowerCase();
+}
+
+String _reverseNormalizedAsciiWords(String value) {
+  final normalized = _normalizeAsciiWords(value);
+  if (normalized.isEmpty) return '';
+  final parts = normalized.split(RegExp(r'\s+')).where((e) => e.isNotEmpty);
+  return parts.toList().reversed.join(' ');
+}
+
+const Map<String, String> _kLeagueRefereeAliasMap = {
+  'Tae-Hwan Seol': '설태환',
+  'Sang-Hyeop Chae': '채상협',
+  'Jun Shin Shin': '신용준',
+};
+
+final Map<String, String> _kLeagueRefereeNameMapNormalized = {
+  for (final entry in _kLeagueRefereeNameMap.entries)
+    _normalizeAsciiWords(entry.key): entry.value,
+  for (final entry in _kLeagueRefereeNameMap.entries)
+    _reverseNormalizedAsciiWords(entry.key): entry.value,
+  for (final entry in _kLeagueRefereeAliasMap.entries)
+    _normalizeAsciiWords(entry.key): entry.value,
+};
+
+final Map<String, String> _kLeagueVenueNameMapNormalized = {
+  for (final entry in _kLeagueVenueNameMap.entries)
+    _normalizeAsciiWords(entry.key): entry.value,
+};
+
+final Map<String, String> _kboVenueNameMapNormalized = {
+  for (final entry in _kboVenueNameMap.entries)
+    _normalizeAsciiWords(entry.key): entry.value,
+};
+
+String _kLeagueRefereeKoreanLabel(String value) {
+  final normalized = _normalizeAsciiWords(value);
+  if (normalized.isEmpty) return '';
+  return _kLeagueRefereeNameMapNormalized[normalized] ??
+      value
+          .replaceAll(RegExp(r',\s*South Korea$', caseSensitive: false), '')
+          .trim();
+}
+
+String _kLeagueVenueKoreanLabel(String venueName, [String city = '']) {
+  final direct = _kLeagueVenueNameMap[venueName.trim()];
+  if (direct != null && direct.isNotEmpty) return direct;
+
+  final normalized = _normalizeAsciiWords(venueName);
+  final normalizedMatch = _kLeagueVenueNameMapNormalized[normalized];
+  if (normalizedMatch != null && normalizedMatch.isNotEmpty) {
+    return normalizedMatch;
+  }
+
+  final trimmedName = venueName.trim();
+  if (trimmedName.isNotEmpty) return trimmedName;
+  return _kLeagueVenueCityMap[city.trim()] ?? city.trim();
+}
+
+String _kLeagueVenueOrCityKoreanLabel(String venueName, [String city = '']) {
+  final venueLabel = _kLeagueVenueKoreanLabel(venueName, city);
+  if (venueLabel.trim().isNotEmpty) return venueLabel;
+  return _kLeagueVenueCityMap[city.trim()] ?? city.trim();
+}
+
+String _kboVenueKoreanLabel(String venueName) {
+  final direct = _kboVenueNameMap[venueName.trim()];
+  if (direct != null && direct.isNotEmpty) return direct;
+
+  final normalized = _normalizeAsciiWords(venueName);
+  final normalizedMatch = _kboVenueNameMapNormalized[normalized];
+  if (normalizedMatch != null && normalizedMatch.isNotEmpty) {
+    return normalizedMatch;
+  }
+
+  return venueName.trim();
+}
+
 class SchedulePage extends StatefulWidget {
   final bool isSoccer;
 
@@ -9,7 +252,9 @@ class SchedulePage extends StatefulWidget {
   State<SchedulePage> createState() => _SchedulePageState();
 }
 
-class _SchedulePageState extends State<SchedulePage> {
+class _SchedulePageState extends State<SchedulePage>
+    with RouteAware, WidgetsBindingObserver {
+  static const Duration _scheduleRefreshInterval = Duration(seconds: 5);
   bool _isMyPageOpen = false;
   String? _selectedFixtureRound;
   String? _selectedKboDate;
@@ -27,27 +272,56 @@ class _SchedulePageState extends State<SchedulePage> {
   @override
   void initState() {
     super.initState();
-    _leagueFuture = _fetchLeagueData();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
-      if (!mounted) return;
-      setState(() {
-        _leagueFuture = _fetchLeagueData();
-      });
+    WidgetsBinding.instance.addObserver(this);
+    _leagueFuture = _fetchLeagueData(forceRefresh: true);
+    _refreshTimer = Timer.periodic(_scheduleRefreshInterval, (_) {
+      _refreshLeagueData(forceRefresh: true);
     });
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic>) {
+      appRouteObserver.unsubscribe(this);
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    appRouteObserver.unsubscribe(this);
     _refreshTimer?.cancel();
     _roundScrollController?.dispose();
     _kboDateScrollController?.dispose();
     super.dispose();
   }
 
-  Future<Map<String, dynamic>> _fetchLeagueData() {
+  @override
+  void didPopNext() {
+    _refreshLeagueData(forceRefresh: true);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshLeagueData(forceRefresh: true);
+    }
+  }
+
+  void _refreshLeagueData({bool forceRefresh = false}) {
+    if (!mounted) return;
+    setState(() {
+      _leagueFuture = _fetchLeagueData(forceRefresh: forceRefresh);
+    });
+  }
+
+  Future<Map<String, dynamic>> _fetchLeagueData({bool forceRefresh = false}) {
     return widget.isSoccer
-        ? ApiService.fetchLeagueData()
-        : ApiService.fetchKboLeagueData();
+        ? _loadCachedKLeagueLeagueData(forceRefresh: forceRefresh)
+        : _loadCachedKboLeagueData(forceRefresh: forceRefresh);
   }
 
   void _toggleMyPage() => setState(() => _isMyPageOpen = !_isMyPageOpen);
@@ -248,7 +522,7 @@ class _SchedulePageState extends State<SchedulePage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'K League Schedule',
+                                'K리그 일정',
                                 style: TextStyle(
                                   fontSize: 24,
                                   fontWeight: FontWeight.w900,
@@ -400,8 +674,15 @@ class _SchedulePageState extends State<SchedulePage> {
       final score = match.hasScore
           ? '${match.homeScore} : ${match.awayScore}'
           : '-:-';
-      final statusLabel = _kboStatusLabel(match.status);
+      final statusLabel = _kboStatusDisplayLabel(
+        match.status,
+        liveInningLabel: match.liveInningLabel,
+      );
       final isLive = _isKboLiveStatus(match.status);
+      final compactInningLabel = _kboCompactLiveInningLabel(
+        match.liveInningLabel,
+      );
+      final timeLabel = _shortTimeLabel(match.time);
       final badgeBackground = isLive
           ? const Color(0xFFE8F7EC)
           : const Color(0xFFFFEEE2);
@@ -437,34 +718,36 @@ class _SchedulePageState extends State<SchedulePage> {
               children: [
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: badgeBackground,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: badgeBorder),
-                      ),
-                      child: Text(
-                        statusLabel,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w900,
-                          color: badgeText,
+                    if (!isLive && statusLabel.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: badgeBackground,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: badgeBorder),
+                        ),
+                        child: Text(
+                          statusLabel,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: badgeText,
+                          ),
                         ),
                       ),
-                    ),
                     const Spacer(),
-                    Text(
-                      match.dateTimeLabel,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
-                        color: muted,
+                    if (timeLabel.isNotEmpty)
+                      Text(
+                        timeLabel,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          color: muted,
+                        ),
                       ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 18),
@@ -485,23 +768,47 @@ class _SchedulePageState extends State<SchedulePage> {
                     ),
                     Container(
                       width: 102,
-                      height: 64,
-                      alignment: Alignment.center,
                       margin: const EdgeInsets.symmetric(horizontal: 14),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? Colors.white10
-                            : const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: border),
-                      ),
-                      child: Text(
-                        score,
-                        style: TextStyle(
-                          fontSize: 25,
-                          fontWeight: FontWeight.w900,
-                          color: text,
-                        ),
+                      child: Column(
+                        children: [
+                          if (isLive) ...[
+                            const Text(
+                              'LIVE',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.9,
+                                color: Color(0xFF16A34A),
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                          ],
+                          Container(
+                            width: double.infinity,
+                            height: 64,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? Colors.white10
+                                  : const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: border),
+                            ),
+                            child: Text(
+                              score,
+                              style: TextStyle(
+                                fontSize: 25,
+                                fontWeight: FontWeight.w900,
+                                color: text,
+                              ),
+                            ),
+                          ),
+                          if (isLive && compactInningLabel.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            _kboLiveInningBadge(compactInningLabel),
+                          ],
+                        ],
                       ),
                     ),
                     Expanded(
@@ -523,10 +830,7 @@ class _SchedulePageState extends State<SchedulePage> {
                 if (match.venue.isNotEmpty || match.city.isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Text(
-                    [
-                      match.venue,
-                      match.city,
-                    ].where((e) => e.isNotEmpty).join(' · '),
+                    match.venue,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -615,7 +919,7 @@ class _SchedulePageState extends State<SchedulePage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'KBO Schedule',
+                              'KBO 일정',
                               style: TextStyle(
                                 fontSize: 24,
                                 fontWeight: FontWeight.w900,
@@ -763,14 +1067,19 @@ class _KboMatchDetailPageState extends State<_KboMatchDetailPage> {
   late Future<Map<String, dynamic>> _detailFuture;
   Timer? _refreshTimer;
 
+  Future<Map<String, dynamic>> _loadDetail() async {
+    await _loadKboDraftPlayerDirectory();
+    return ApiService.fetchKboMatchDetails(widget.match.id);
+  }
+
   @override
   void initState() {
     super.initState();
-    _detailFuture = ApiService.fetchKboMatchDetails(widget.match.id);
+    _detailFuture = _loadDetail();
     _refreshTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       if (!mounted) return;
       setState(() {
-        _detailFuture = ApiService.fetchKboMatchDetails(widget.match.id);
+        _detailFuture = _loadDetail();
       });
     });
   }
@@ -822,9 +1131,16 @@ class _KboMatchDetailPageState extends State<_KboMatchDetailPage> {
           final date = _kboResolvedDate(match, widget.match);
           final time = _kboResolvedTime(match, widget.match);
           final status = _fixtureText(match['status'], widget.match.status);
-          final venue = _fixtureText(match['venue'], widget.match.venue);
-          final city = _fixtureText(match['city'], widget.match.city);
+          final venue = _kboVenueKoreanLabel(
+            _fixtureText(match['venue'], widget.match.venue),
+          );
+          final innings = _fixtureAsList(data['innings']);
           final lineups = _fixtureAsList(data['lineups']);
+          final pitching = _fixtureAsMap(data['pitching']);
+          final liveInningLabel = _fixtureText(
+            match['liveInningLabel'],
+            widget.match.liveInningLabel,
+          );
 
           return CustomScrollView(
             slivers: [
@@ -839,43 +1155,34 @@ class _KboMatchDetailPageState extends State<_KboMatchDetailPage> {
                       awayScore: awayScore,
                       date: date,
                       time: time,
+                      venue: venue,
                       status: status,
-                      text: text,
-                      muted: muted,
-                      border: border,
-                      isDark: isDark,
-                    ),
-                    const SizedBox(height: 24),
-                    _KboSectionTitle('Inning Breakdown', color: text),
-                    const SizedBox(height: 12),
-                    _KboInningBreakdownCard(
-                      innings: _fixtureAsList(data['innings']),
-                      home: home,
-                      away: away,
-                      homeScore: homeScore,
-                      awayScore: awayScore,
-                      text: text,
-                      muted: muted,
-                      border: border,
-                      isDark: isDark,
-                    ),
-                    const SizedBox(height: 24),
-                    _KboSectionTitle('Pitching', color: text),
-                    const SizedBox(height: 12),
-                    _KboPitchingCard(
-                      pitching: _fixtureAsMap(data['pitching']),
+                      liveInningLabel: liveInningLabel,
+                      pitching: pitching,
                       lineups: lineups,
-                      home: home,
-                      away: away,
-                      homeScore: homeScore,
-                      awayScore: awayScore,
                       text: text,
                       muted: muted,
                       border: border,
                       isDark: isDark,
                     ),
+                    if (innings.isNotEmpty) ...[
+                      const SizedBox(height: 24),
+                      _KboSectionTitle('이닝별 점수', color: text),
+                      const SizedBox(height: 12),
+                      _KboInningsCard(
+                        innings: innings,
+                        home: home,
+                        away: away,
+                        homeScore: homeScore,
+                        awayScore: awayScore,
+                        text: text,
+                        muted: muted,
+                        border: border,
+                        isDark: isDark,
+                      ),
+                    ],
                     const SizedBox(height: 24),
-                    _KboSectionTitle('Starting Lineups', color: text),
+                    _KboSectionTitle('선발 라인업', color: text),
                     const SizedBox(height: 12),
                     _KboStartingLineupsCard(
                       lineups: lineups,
@@ -886,25 +1193,164 @@ class _KboMatchDetailPageState extends State<_KboMatchDetailPage> {
                       border: border,
                       isDark: isDark,
                     ),
-                    if (venue.isNotEmpty || city.isNotEmpty) ...[
-                      const SizedBox(height: 24),
-                      _KboSectionTitle('경기 정보', color: text),
-                      const SizedBox(height: 12),
-                      _KboGameInfoCard(
-                        venue: venue,
-                        city: city,
-                        text: text,
-                        muted: muted,
-                        border: border,
-                        isDark: isDark,
-                      ),
-                    ],
+                    const SizedBox(height: 24),
+                    _KboSectionTitle('교체 명단', color: text),
+                    const SizedBox(height: 12),
+                    _KboBenchCard(
+                      lineups: lineups,
+                      home: home,
+                      away: away,
+                      text: text,
+                      muted: muted,
+                      border: border,
+                      isDark: isDark,
+                    ),
                   ]),
                 ),
               ),
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _KboInningsCard extends StatelessWidget {
+  final List<dynamic> innings;
+  final String home;
+  final String away;
+  final int? homeScore;
+  final int? awayScore;
+  final Color text;
+  final Color muted;
+  final Color border;
+  final bool isDark;
+
+  const _KboInningsCard({
+    required this.innings,
+    required this.home,
+    required this.away,
+    required this.homeScore,
+    required this.awayScore,
+    required this.text,
+    required this.muted,
+    required this.border,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final inningRows = innings
+        .map(_fixtureAsMap)
+        .where(
+          (row) =>
+              _fixtureText(row['label']).isNotEmpty ||
+              _fixtureText(row['home']).isNotEmpty ||
+              _fixtureText(row['away']).isNotEmpty,
+        )
+        .toList();
+    if (inningRows.isEmpty) {
+      return _KboEmptyCard(
+        message: '이닝별 점수 데이터가 아직 없습니다.',
+        text: text,
+        muted: muted,
+        border: border,
+        isDark: isDark,
+      );
+    }
+
+    Widget headerCell(
+      String label, {
+      required int flex,
+      TextAlign align = TextAlign.center,
+    }) {
+      return Expanded(
+        flex: flex,
+        child: Text(
+          label,
+          textAlign: align,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w900,
+            color: muted,
+          ),
+        ),
+      );
+    }
+
+    Widget valueCell(
+      String label, {
+      required int flex,
+      required bool emphasize,
+      TextAlign align = TextAlign.center,
+    }) {
+      return Expanded(
+        flex: flex,
+        child: Text(
+          label,
+          textAlign: align,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: emphasize ? FontWeight.w900 : FontWeight.w800,
+            color: text,
+          ),
+        ),
+      );
+    }
+
+    Widget scoreRow(String teamName, List<String> values, String total) {
+      final displayTeamName = _displayFantasyClubName(
+        teamName,
+        isSoccer: false,
+      );
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: [
+            valueCell(
+              displayTeamName,
+              flex: 2,
+              emphasize: true,
+              align: TextAlign.left,
+            ),
+            for (final value in values)
+              valueCell(value, flex: 1, emphasize: false),
+            valueCell(total, flex: 1, emphasize: true),
+          ],
+        ),
+      );
+    }
+
+    final inningValuesHome = <String>[];
+    final inningValuesAway = <String>[];
+    for (final row in inningRows) {
+      inningValuesHome.add(_fixtureText(row['home'], '-'));
+      inningValuesAway.add(_fixtureText(row['away'], '-'));
+    }
+
+    return _KboDetailCard(
+      border: border,
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              headerCell('', flex: 2, align: TextAlign.left),
+              for (final row in inningRows)
+                headerCell(_fixtureText(row['label'], '-'), flex: 1),
+              headerCell('R', flex: 1),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Divider(height: 1, color: border),
+          scoreRow(away, inningValuesAway, '${awayScore ?? '-'}'),
+          Divider(height: 1, color: border),
+          scoreRow(home, inningValuesHome, '${homeScore ?? '-'}'),
+        ],
       ),
     );
   }
@@ -917,7 +1363,11 @@ class _KboScoreHeroCard extends StatelessWidget {
   final int? awayScore;
   final String date;
   final String time;
+  final String venue;
   final String status;
+  final String liveInningLabel;
+  final Map<String, dynamic> pitching;
+  final List<dynamic> lineups;
   final Color text;
   final Color muted;
   final Color border;
@@ -930,7 +1380,11 @@ class _KboScoreHeroCard extends StatelessWidget {
     required this.awayScore,
     required this.date,
     required this.time,
+    required this.venue,
     required this.status,
+    required this.liveInningLabel,
+    required this.pitching,
+    required this.lineups,
     required this.text,
     required this.muted,
     required this.border,
@@ -939,34 +1393,67 @@ class _KboScoreHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final displayHome = _displayFantasyClubName(home, isSoccer: false);
+    final displayAway = _displayFantasyClubName(away, isSoccer: false);
     final score = homeScore == null || awayScore == null
         ? '-:-'
         : '$homeScore : $awayScore';
+    final compactInningLabel = _kboCompactLiveInningLabel(liveInningLabel);
+    final homePitching = _fixtureAsMap(pitching['home']);
+    final awayPitching = _fixtureAsMap(pitching['away']);
+    final homeLineup = _kboLineupForTeam(lineups, home);
+    final awayLineup = _kboLineupForTeam(lineups, away);
+    final homePitcher = _kboDisplayPlayerName(
+      _fixtureText(
+        _fixtureText(homeLineup['starterPitcher']),
+        homePitching['name'],
+      ),
+      club: home,
+    );
+    final awayPitcher = _kboDisplayPlayerName(
+      _fixtureText(
+        _fixtureText(awayLineup['starterPitcher']),
+        awayPitching['name'],
+      ),
+      club: away,
+    );
+    final homeSavePitcher = _kboDisplayPlayerName(
+      _fixtureText(homePitching['saveName']),
+      club: home,
+    );
+    final awaySavePitcher = _kboDisplayPlayerName(
+      _fixtureText(awayPitching['saveName']),
+      club: away,
+    );
+    final homeResult = _pitchingResult(
+      explicit: _fixtureText(homePitching['result']),
+      isHome: true,
+    );
+    final awayResult = _pitchingResult(
+      explicit: _fixtureText(awayPitching['result']),
+      isHome: false,
+    );
     return _KboDetailCard(
       border: border,
       isDark: isDark,
       child: Column(
         children: [
-          Row(
-            children: [
-              _KboStatusChip(status: status),
-              const Spacer(),
-              Text(
-                _kboStatusLabel(status) == 'Final' ? 'Final' : 'KBO',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
-                  color: muted,
-                ),
-              ),
-            ],
+          Align(
+            alignment: Alignment.center,
+            child: _KboStatusChip(
+              status: status,
+              liveInningLabel: liveInningLabel,
+            ),
           ),
           const SizedBox(height: 24),
           Text(
             [
-              _kboDetailDateLabel(date),
-              _shortTimeLabel(time),
-            ].where((e) => e.isNotEmpty).join(' '),
+              [
+                _kboDetailDateLabel(date),
+                _shortTimeLabel(time),
+              ].where((e) => e.isNotEmpty).join(' '),
+              venue,
+            ].where((e) => e.isNotEmpty).join(' · '),
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w900,
@@ -978,38 +1465,72 @@ class _KboScoreHeroCard extends StatelessWidget {
             children: [
               Expanded(
                 child: _KboTeamHero(
-                  name: home,
+                  name: displayHome,
                   color: const Color(0xFF3B82F6),
                   align: CrossAxisAlignment.start,
                   textAlign: TextAlign.left,
                   text: text,
+                  pitcher: homePitcher,
+                  savePitcher: homeSavePitcher,
+                  result: homeResult,
+                  showDecision: _kboStatusLabel(status) == '종료',
                 ),
               ),
-              Container(
-                width: 128,
-                height: 82,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: isDark ? Colors.white10 : const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: border),
-                ),
-                child: Text(
-                  score,
-                  style: TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.w900,
-                    color: text,
-                  ),
+              SizedBox(
+                width: 144,
+                child: Column(
+                  children: [
+                    if (_isKboLiveStatus(status)) ...[
+                      const Text(
+                        'LIVE',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.0,
+                          color: Color(0xFF16A34A),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    Container(
+                      height: 90,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? Colors.white10
+                            : const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: border),
+                      ),
+                      child: Text(
+                        score,
+                        style: TextStyle(
+                          fontSize: 38,
+                          fontWeight: FontWeight.w900,
+                          color: text,
+                        ),
+                      ),
+                    ),
+                    if (_isKboLiveStatus(status) &&
+                        compactInningLabel.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      _kboLiveInningBadge(compactInningLabel),
+                    ],
+                  ],
                 ),
               ),
               Expanded(
                 child: _KboTeamHero(
-                  name: away,
+                  name: displayAway,
                   color: const Color(0xFFF97316),
                   align: CrossAxisAlignment.end,
                   textAlign: TextAlign.right,
                   text: text,
+                  pitcher: awayPitcher,
+                  savePitcher: awaySavePitcher,
+                  result: awayResult,
+                  showDecision: _kboStatusLabel(status) == '종료',
                 ),
               ),
             ],
@@ -1018,6 +1539,41 @@ class _KboScoreHeroCard extends StatelessWidget {
       ),
     );
   }
+
+  String _pitchingResult({required String explicit, required bool isHome}) {
+    if (explicit.contains('승') || explicit.toLowerCase().contains('win')) {
+      return '승';
+    }
+    if (explicit.contains('패') || explicit.toLowerCase().contains('loss')) {
+      return '패';
+    }
+    if (homeScore == null || awayScore == null || homeScore == awayScore) {
+      return '';
+    }
+    final won = isHome ? homeScore! > awayScore! : awayScore! > homeScore!;
+    return won ? '승' : '패';
+  }
+}
+
+Widget _kboLiveInningBadge(String label) {
+  return Container(
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(
+        color: const Color(0xFF16A34A).withValues(alpha: 0.30),
+      ),
+    ),
+    child: Text(
+      label,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w900,
+        color: Color(0xFF16A34A),
+      ),
+    ),
+  );
 }
 
 class _KboTeamHero extends StatelessWidget {
@@ -1026,6 +1582,10 @@ class _KboTeamHero extends StatelessWidget {
   final CrossAxisAlignment align;
   final TextAlign textAlign;
   final Color text;
+  final String pitcher;
+  final String savePitcher;
+  final String result;
+  final bool showDecision;
 
   const _KboTeamHero({
     required this.name,
@@ -1033,10 +1593,17 @@ class _KboTeamHero extends StatelessWidget {
     required this.align,
     required this.textAlign,
     required this.text,
+    required this.pitcher,
+    required this.savePitcher,
+    required this.result,
+    required this.showDecision,
   });
 
   @override
   Widget build(BuildContext context) {
+    final showPitcher = pitcher.isNotEmpty;
+    final showSavePitcher = showDecision && savePitcher.isNotEmpty;
+    final showDecisionBadge = showDecision && result.isNotEmpty;
     return Column(
       crossAxisAlignment: align,
       children: [
@@ -1065,340 +1632,99 @@ class _KboTeamHero extends StatelessWidget {
           textAlign: textAlign,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            fontSize: 18,
-            height: 1.1,
+            fontSize: 22,
+            height: 1.08,
             fontWeight: FontWeight.w900,
             color: text,
           ),
         ),
-      ],
-    );
-  }
-}
-
-class _KboInningBreakdownCard extends StatelessWidget {
-  final List<dynamic> innings;
-  final String home;
-  final String away;
-  final int? homeScore;
-  final int? awayScore;
-  final Color text;
-  final Color muted;
-  final Color border;
-  final bool isDark;
-
-  const _KboInningBreakdownCard({
-    required this.innings,
-    required this.home,
-    required this.away,
-    required this.homeScore,
-    required this.awayScore,
-    required this.text,
-    required this.muted,
-    required this.border,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final inningRows = innings.map(_fixtureAsMap).toList();
-    final regular = List.generate(9, (index) => '${index + 1}');
-    final extras = inningRows.where((row) {
-      final label = _fixtureText(row['label']);
-      final parsed = int.tryParse(label);
-      return parsed != null && parsed > 9;
-    }).toList();
-    final headers = [...regular, 'EX', 'R', 'H', 'E'];
-
-    String valueFor(String label, String side) {
-      if (label == 'EX') {
-        final total = extras.fold<int>(0, (runningTotal, row) {
-          return runningTotal + (_readNullableInt(row[side]) ?? 0);
-        });
-        return total == 0 ? '0' : '$total';
-      }
-      if (label == 'R') {
-        return side == 'home' ? '${homeScore ?? '-'}' : '${awayScore ?? '-'}';
-      }
-      if (label == 'H' || label == 'E') return '-';
-      final row = inningRows.firstWhere(
-        (entry) => _fixtureText(entry['label']) == label,
-        orElse: () => const <String, dynamic>{},
-      );
-      return _fixtureText(row[side], '0');
-    }
-
-    if (inningRows.isEmpty && homeScore == null && awayScore == null) {
-      return _KboEmptyCard(
-        text: text,
-        muted: muted,
-        border: border,
-        isDark: isDark,
-        message: '이닝별 기록이 아직 제공되지 않습니다.',
-      );
-    }
-
-    return _KboDetailCard(
-      border: border,
-      isDark: isDark,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _KboInningRow(values: ['', ...headers], text: muted, bold: true),
-            const SizedBox(height: 10),
-            _KboInningRow(
-              values: [
-                home,
-                ...headers.map((label) => valueFor(label, 'home')),
-              ],
-              text: text,
-              bold: true,
-            ),
-            Divider(color: border),
-            _KboInningRow(
-              values: [
-                away,
-                ...headers.map((label) => valueFor(label, 'away')),
-              ],
-              text: text,
-              bold: true,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _KboInningRow extends StatelessWidget {
-  final List<String> values;
-  final Color text;
-  final bool bold;
-
-  const _KboInningRow({
-    required this.values,
-    required this.text,
-    required this.bold,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        for (int i = 0; i < values.length; i++)
-          SizedBox(
-            width: i == 0 ? 64 : 28,
-            child: Text(
-              values[i],
-              textAlign: i == 0 ? TextAlign.left : TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: i == 0 ? 13 : 12,
-                fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
-                color: text,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _KboPitchingCard extends StatelessWidget {
-  final Map<String, dynamic> pitching;
-  final List<dynamic> lineups;
-  final String home;
-  final String away;
-  final int? homeScore;
-  final int? awayScore;
-  final Color text;
-  final Color muted;
-  final Color border;
-  final bool isDark;
-
-  const _KboPitchingCard({
-    required this.pitching,
-    required this.lineups,
-    required this.home,
-    required this.away,
-    required this.homeScore,
-    required this.awayScore,
-    required this.text,
-    required this.muted,
-    required this.border,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final homePitching = _fixtureAsMap(pitching['home']);
-    final awayPitching = _fixtureAsMap(pitching['away']);
-    final homeLineup = _kboLineupForTeam(lineups, home);
-    final awayLineup = _kboLineupForTeam(lineups, away);
-    final homeName = _fixtureText(
-      homePitching['name'],
-      _fixtureText(homeLineup['starterPitcher'], '-'),
-    );
-    final awayName = _fixtureText(
-      awayPitching['name'],
-      _fixtureText(awayLineup['starterPitcher'], '-'),
-    );
-    final homeSaveName = _fixtureText(homePitching['saveName']);
-    final awaySaveName = _fixtureText(awayPitching['saveName']);
-    final homeResult = _pitchingResult(
-      explicit: _fixtureText(homePitching['result']),
-      isHome: true,
-    );
-    final awayResult = _pitchingResult(
-      explicit: _fixtureText(awayPitching['result']),
-      isHome: false,
-    );
-
-    return _KboDetailCard(
-      border: border,
-      isDark: isDark,
-      child: Row(
-        children: [
-          Expanded(
-            child: _KboPitcherSide(
-              team: home,
-              pitcher: homeName,
-              result: homeResult,
-              savePitcher: homeSaveName,
-              alignRight: false,
-              text: text,
-              muted: muted,
-            ),
-          ),
-          Container(width: 1, height: 58, color: border),
-          Expanded(
-            child: _KboPitcherSide(
-              team: away,
-              pitcher: awayName,
-              result: awayResult,
-              savePitcher: awaySaveName,
-              alignRight: true,
-              text: text,
-              muted: muted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _pitchingResult({required String explicit, required bool isHome}) {
-    if (explicit.contains('승') || explicit.toLowerCase().contains('win')) {
-      return '승';
-    }
-    if (explicit.contains('패') || explicit.toLowerCase().contains('loss')) {
-      return '패';
-    }
-    if (homeScore == null || awayScore == null || homeScore == awayScore) {
-      return '';
-    }
-    final won = isHome ? homeScore! > awayScore! : awayScore! > homeScore!;
-    return won ? '승' : '패';
-  }
-}
-
-class _KboPitcherSide extends StatelessWidget {
-  final String team;
-  final String pitcher;
-  final String result;
-  final String savePitcher;
-  final bool alignRight;
-  final Color text;
-  final Color muted;
-
-  const _KboPitcherSide({
-    required this.team,
-    required this.pitcher,
-    required this.result,
-    required this.savePitcher,
-    required this.alignRight,
-    required this.text,
-    required this.muted,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final saveVisible = savePitcher.isNotEmpty && savePitcher != pitcher;
-    return Column(
-      crossAxisAlignment: alignRight
-          ? CrossAxisAlignment.end
-          : CrossAxisAlignment.start,
-      children: [
-        Text(
-          team,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w900,
-            color: muted,
-          ),
-        ),
-        const SizedBox(height: 18),
-        _KboPitcherRow(
-          pitcher: pitcher,
-          result: result,
-          alignRight: alignRight,
-          text: text,
-        ),
-        if (saveVisible) ...[
+        if (showPitcher) ...[
           const SizedBox(height: 8),
-          _KboPitcherRow(
-            pitcher: savePitcher,
-            result: '세',
-            alignRight: alignRight,
-            text: text,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: textAlign == TextAlign.right
+                ? [
+                    Flexible(
+                      child: Text(
+                        pitcher,
+                        maxLines: 1,
+                        textAlign: textAlign,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF6B7280),
+                        ),
+                      ),
+                    ),
+                    if (showDecisionBadge) ...[
+                      const SizedBox(width: 6),
+                      _KboDecisionBadge(result: result),
+                    ],
+                  ]
+                : [
+                    if (showDecisionBadge) ...[
+                      _KboDecisionBadge(result: result),
+                      const SizedBox(width: 6),
+                    ],
+                    Flexible(
+                      child: Text(
+                        pitcher,
+                        maxLines: 1,
+                        textAlign: textAlign,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: const Color(0xFF6B7280),
+                        ),
+                      ),
+                    ),
+                  ],
+          ),
+        ],
+        if (showSavePitcher) ...[
+          const SizedBox(height: 6),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: textAlign == TextAlign.right
+                ? [
+                    Flexible(
+                      child: Text(
+                        savePitcher,
+                        maxLines: 1,
+                        textAlign: textAlign,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF111827),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const _KboSaveBadge(),
+                  ]
+                : [
+                    const _KboSaveBadge(),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        savePitcher,
+                        maxLines: 1,
+                        textAlign: textAlign,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF111827),
+                        ),
+                      ),
+                    ),
+                  ],
           ),
         ],
       ],
-    );
-  }
-}
-
-class _KboPitcherRow extends StatelessWidget {
-  final String pitcher;
-  final String result;
-  final bool alignRight;
-  final Color text;
-
-  const _KboPitcherRow({
-    required this.pitcher,
-    required this.result,
-    required this.alignRight,
-    required this.text,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final children = [
-      if (result.isNotEmpty) _KboDecisionBadge(result: result),
-      if (result.isNotEmpty) const SizedBox(width: 8),
-      Flexible(
-        child: Text(
-          pitcher,
-          maxLines: 1,
-          textAlign: alignRight ? TextAlign.right : TextAlign.left,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w900,
-            color: text,
-          ),
-        ),
-      ),
-    ];
-
-    return Row(
-      mainAxisAlignment: alignRight
-          ? MainAxisAlignment.end
-          : MainAxisAlignment.start,
-      children: alignRight ? children.reversed.toList() : children,
     );
   }
 }
@@ -1426,11 +1752,11 @@ class _KboStartingLineupsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final homeLineup = _kboLineupForTeam(lineups, home);
     final awayLineup = _kboLineupForTeam(lineups, away);
+    final homeIsOfficial = _fixtureText(homeLineup['source']) == 'official';
+    final awayIsOfficial = _fixtureText(awayLineup['source']) == 'official';
     final hasLineups =
-        _fixtureAsList(homeLineup['players']).isNotEmpty ||
-        _fixtureAsList(awayLineup['players']).isNotEmpty ||
-        _fixtureText(homeLineup['starterPitcher']).isNotEmpty ||
-        _fixtureText(awayLineup['starterPitcher']).isNotEmpty;
+        (homeIsOfficial && _fixtureAsList(homeLineup['players']).isNotEmpty) ||
+        (awayIsOfficial && _fixtureAsList(awayLineup['players']).isNotEmpty);
 
     if (!hasLineups) {
       return _KboEmptyCard(
@@ -1492,14 +1818,19 @@ class _KboLineupColumn extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final team = _fixtureText(lineup['team'], fallbackTeam);
-    final starterPitcher = _fixtureText(lineup['starterPitcher']);
-    final allPlayers = _fixtureAsList(lineup['players']).map(_fixtureAsMap);
+    final team = _displayFantasyClubName(
+      _fixtureText(lineup['team'], fallbackTeam),
+      isSoccer: false,
+    );
+    final allPlayers = _kboDisplayableLineupPlayers(
+      _fixtureAsList(lineup['players']).map(_fixtureAsMap),
+      club: team,
+    );
     final source = _fixtureText(lineup['source']);
-    final isProjected = source == 'projected';
-    final players = isProjected
-        ? const Iterable<Map<String, dynamic>>.empty()
-        : allPlayers;
+    final isOfficial = source == 'official';
+    final players = isOfficial
+        ? allPlayers
+        : const Iterable<Map<String, dynamic>>.empty();
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Column(
@@ -1515,37 +1846,13 @@ class _KboLineupColumn extends StatelessWidget {
               color: text,
             ),
           ),
-          if (isProjected) ...[
-            const SizedBox(height: 6),
-            Text(
-              '공식 타순 미제공 · 로스터 기준 선발명단',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: muted,
-              ),
-            ),
-          ],
           Divider(height: 22, color: border),
-          if (starterPitcher.isNotEmpty) ...[
-            _KboStarterPitcherRow(
-              name: starterPitcher,
+          for (final player in players) ...[
+            _KboPlayerListRow(
+              label: _kboLineupPlayerLabel(player),
+              substituted: player['substituted'] == true,
               text: text,
               muted: muted,
-              border: border,
-            ),
-            Divider(height: 22, color: border),
-          ],
-          for (final player in players) ...[
-            Text(
-              _kboLineupPlayerLabel(player),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w900,
-                color: text,
-              ),
             ),
             Divider(height: 22, color: border),
           ],
@@ -1553,11 +1860,7 @@ class _KboLineupColumn extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 4, bottom: 8),
               child: Text(
-                starterPitcher.isEmpty
-                    ? '선발 정보 준비 중'
-                    : isProjected
-                    ? '공식 선발명단이 아직 제공되지 않습니다.'
-                    : '타순 정보는 아직 제공되지 않습니다.',
+                '공식 타순 정보가 아직 제공되지 않습니다.',
                 style: TextStyle(
                   fontSize: 12,
                   height: 1.35,
@@ -1572,68 +1875,19 @@ class _KboLineupColumn extends StatelessWidget {
   }
 }
 
-class _KboStarterPitcherRow extends StatelessWidget {
-  final String name;
-  final Color text;
-  final Color muted;
-  final Color border;
-
-  const _KboStarterPitcherRow({
-    required this.name,
-    required this.text,
-    required this.muted,
-    required this.border,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-      decoration: BoxDecoration(
-        color: border.withValues(alpha: 0.2),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '선발투수',
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w800,
-              color: muted,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w900,
-              color: text,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _KboGameInfoCard extends StatelessWidget {
-  final String venue;
-  final String city;
+class _KboBenchCard extends StatelessWidget {
+  final List<dynamic> lineups;
+  final String home;
+  final String away;
   final Color text;
   final Color muted;
   final Color border;
   final bool isDark;
 
-  const _KboGameInfoCard({
-    required this.venue,
-    required this.city,
+  const _KboBenchCard({
+    required this.lineups,
+    required this.home,
+    required this.away,
     required this.text,
     required this.muted,
     required this.border,
@@ -1642,15 +1896,140 @@ class _KboGameInfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final homeLineup = _kboLineupForTeam(lineups, home);
+    final awayLineup = _kboLineupForTeam(lineups, away);
+    final homeIsOfficial = _fixtureText(homeLineup['source']) == 'official';
+    final awayIsOfficial = _fixtureText(awayLineup['source']) == 'official';
+    final homeSubs = _fixtureAsList(
+      homeLineup['substitutes'],
+    ).map(_fixtureAsMap);
+    final awaySubs = _fixtureAsList(
+      awayLineup['substitutes'],
+    ).map(_fixtureAsMap);
+    final hasBench =
+        (homeIsOfficial && homeSubs.isNotEmpty) ||
+        (awayIsOfficial && awaySubs.isNotEmpty);
+
+    if (!hasBench) {
+      return _KboEmptyCard(
+        text: text,
+        muted: muted,
+        border: border,
+        isDark: isDark,
+        message: '교체 명단이 아직 제공되지 않습니다.',
+      );
+    }
+
     return _KboDetailCard(
       border: border,
       isDark: isDark,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: _KboBenchColumn(
+                lineup: homeLineup,
+                fallbackTeam: home,
+                text: text,
+                muted: muted,
+                border: border,
+              ),
+            ),
+            Container(width: 1, color: border),
+            Expanded(
+              child: _KboBenchColumn(
+                lineup: awayLineup,
+                fallbackTeam: away,
+                text: text,
+                muted: muted,
+                border: border,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _KboBenchColumn extends StatelessWidget {
+  final Map<String, dynamic> lineup;
+  final String fallbackTeam;
+  final Color text;
+  final Color muted;
+  final Color border;
+
+  const _KboBenchColumn({
+    required this.lineup,
+    required this.fallbackTeam,
+    required this.text,
+    required this.muted,
+    required this.border,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final team = _displayFantasyClubName(
+      _fixtureText(lineup['team'], fallbackTeam),
+      isSoccer: false,
+    );
+    final isOfficial = _fixtureText(lineup['source']) == 'official';
+    final substitutes =
+        _kboDisplayableLineupPlayers(
+          isOfficial
+              ? _fixtureAsList(lineup['substitutes']).map(_fixtureAsMap)
+              : const Iterable<Map<String, dynamic>>.empty(),
+          club: team,
+        ).toList()..sort((a, b) {
+          final aSubstituted = a['substituted'] == true;
+          final bSubstituted = b['substituted'] == true;
+          if (aSubstituted != bSubstituted) {
+            return aSubstituted ? -1 : 1;
+          }
+          final aNumber = _readNullableInt(a['number']) ?? 999;
+          final bNumber = _readNullableInt(b['number']) ?? 999;
+          if (aNumber != bNumber) return aNumber.compareTo(bNumber);
+          return _fixtureText(a['name']).compareTo(_fixtureText(b['name']));
+        });
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _KboInfoRow(label: '경기장', value: venue, text: text, muted: muted),
-          if (city.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            _KboInfoRow(label: '도시', value: city, text: text, muted: muted),
+          Text(
+            team,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w900,
+              color: text,
+            ),
+          ),
+          Divider(height: 22, color: border),
+          if (substitutes.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4, bottom: 8),
+              child: Text(
+                '교체 명단 정보 준비 중',
+                style: TextStyle(
+                  fontSize: 12,
+                  height: 1.35,
+                  fontWeight: FontWeight.w700,
+                  color: muted,
+                ),
+              ),
+            ),
+          for (final player in substitutes) ...[
+            _KboPlayerListRow(
+              label: _kboBenchPlayerLabel(player),
+              substituted: player['substituted'] == true,
+              text: text,
+              muted: muted,
+            ),
+            Divider(height: 22, color: border),
           ],
         ],
       ),
@@ -1658,15 +2037,15 @@ class _KboGameInfoCard extends StatelessWidget {
   }
 }
 
-class _KboInfoRow extends StatelessWidget {
+class _KboPlayerListRow extends StatelessWidget {
   final String label;
-  final String value;
+  final bool substituted;
   final Color text;
   final Color muted;
 
-  const _KboInfoRow({
+  const _KboPlayerListRow({
     required this.label,
-    required this.value,
+    required this.substituted,
     required this.text,
     required this.muted,
   });
@@ -1675,19 +2054,11 @@ class _KboInfoRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-            color: muted,
-          ),
-        ),
-        const Spacer(),
-        Flexible(
+        Expanded(
           child: Text(
-            value,
-            textAlign: TextAlign.right,
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w900,
@@ -1695,6 +2066,12 @@ class _KboInfoRow extends StatelessWidget {
             ),
           ),
         ),
+        if (substituted) ...[
+          const SizedBox(width: 8),
+          Icon(Icons.swap_horiz, size: 16, color: const Color(0xFF2563EB)),
+        ] else ...[
+          const SizedBox(width: 16),
+        ],
       ],
     );
   }
@@ -1784,8 +2161,9 @@ class _KboSectionTitle extends StatelessWidget {
 
 class _KboStatusChip extends StatelessWidget {
   final String status;
+  final String liveInningLabel;
 
-  const _KboStatusChip({required this.status});
+  const _KboStatusChip({required this.status, this.liveInningLabel = ''});
 
   @override
   Widget build(BuildContext context) {
@@ -1801,7 +2179,9 @@ class _KboStatusChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        _kboStatusLabel(status),
+        isLive
+            ? 'LIVE'
+            : _kboStatusDisplayLabel(status, liveInningLabel: liveInningLabel),
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w900,
@@ -1845,6 +2225,30 @@ class _KboDecisionBadge extends StatelessWidget {
   }
 }
 
+class _KboSaveBadge extends StatelessWidget {
+  const _KboSaveBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: const Color(0xFFDCFCE7),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: const Color(0xFF86EFAC)),
+      ),
+      child: const Text(
+        '세',
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w900,
+          color: Color(0xFF15803D),
+        ),
+      ),
+    );
+  }
+}
+
 String _kboDetailDateLabel(String value) {
   final parts = value.split('-');
   if (parts.length == 3) {
@@ -1876,6 +2280,37 @@ Map<String, dynamic> _kboLineupForTeam(List<dynamic> lineups, String team) {
   return const {};
 }
 
+List<Map<String, dynamic>> _kboDisplayableLineupPlayers(
+  Iterable<Map<String, dynamic>> players, {
+  required String club,
+}) {
+  final resolvedClub = _normalizeKboDraftClub(club);
+  if (resolvedClub.isEmpty) return players.toList(growable: false);
+
+  final normalized = <Map<String, dynamic>>[];
+  for (final player in players) {
+    final rawName = _fixtureText(player['name'], '-');
+    final number = _readNullableInt(player['number']) ?? 0;
+    final resolvedPosition = _resolveKboPlayerPosition(
+      _fixtureText(player['position']),
+      club: resolvedClub,
+      rawName: rawName,
+      number: number,
+    );
+    if (resolvedPosition.isEmpty) continue;
+    normalized.add({
+      ...player,
+      'name': _kboDisplayPlayerName(
+        rawName,
+        club: resolvedClub,
+        number: number,
+      ),
+      'position': resolvedPosition,
+    });
+  }
+  return normalized;
+}
+
 String _kboLineupPlayerLabel(Map<String, dynamic> player) {
   final order = _fixtureText(player['order']);
   final name = _fixtureText(player['name'], '-');
@@ -1883,6 +2318,15 @@ String _kboLineupPlayerLabel(Map<String, dynamic> player) {
   final orderPrefix = order.isEmpty ? '' : '$order ';
   final positionSuffix = position.isEmpty ? '' : ' · $position';
   return '$orderPrefix$name$positionSuffix';
+}
+
+String _kboBenchPlayerLabel(Map<String, dynamic> player) {
+  final name = _fixtureText(player['name'], '-');
+  final position = _fixtureText(player['position']);
+  final number = _fixtureText(player['number']);
+  final numberPrefix = number.isEmpty ? '' : '#$number ';
+  final positionSuffix = position.isEmpty ? '' : ' · $position';
+  return '$numberPrefix$name$positionSuffix';
 }
 
 class _KLeagueFixture {
@@ -2209,6 +2653,444 @@ class _KLeagueFixtureDetailPageState extends State<_KLeagueFixtureDetailPage> {
 
   void _toggleMyPage() => setState(() => _isMyPageOpen = !_isMyPageOpen);
 
+  String _fixtureOpponentLabelForClub(String canonicalClub) {
+    final data = _data ?? const <String, dynamic>{};
+    final fixtureData = _fixtureAsMap(data['fixture']);
+    final teams = _fixtureAsMap(fixtureData['teams']);
+    final home = _fixtureAsMap(teams['home']);
+    final away = _fixtureAsMap(teams['away']);
+    final homeName = _kLeagueDisplayTeamName(_fixtureText(home['name']));
+    final awayName = _kLeagueDisplayTeamName(_fixtureText(away['name']));
+    final homeClub = _canonicalKLeagueClub(homeName);
+    final awayClub = _canonicalKLeagueClub(awayName);
+    if (canonicalClub == homeClub) return awayName;
+    if (canonicalClub == awayClub) return homeName;
+    return '';
+  }
+
+  String _fixturePopupPositionLabel(String raw) {
+    switch (raw.trim().toUpperCase()) {
+      case 'G':
+        return 'GK';
+      case 'D':
+        return 'DF';
+      case 'M':
+        return 'MF';
+      case 'F':
+        return 'FW';
+      default:
+        return raw.trim();
+    }
+  }
+
+  _PlayerSlot _fixturePopupSlotFromPlayer(
+    _LineupPlayer player,
+    Map<String, dynamic> lineup,
+  ) {
+    final team = _fixtureAsMap(lineup['team']);
+    final club = _kLeagueDisplayTeamName(_fixtureText(team['name']));
+    return _PlayerSlot(
+      name: player.name,
+      score: 0,
+      position: _fixturePopupPositionLabel(player.position),
+      club: club,
+      number: int.tryParse(player.number.trim()) ?? 0,
+      playerId: player.id,
+    );
+  }
+
+  Future<
+    ({
+      double displayedPoints,
+      double basePoints,
+      List<_PlayerRoundPointDetail> details,
+      bool appeared,
+      String? opponentLabel,
+      bool fixtureStarted,
+    })
+  >
+  _loadFixturePlayerPopupData({
+    required _LineupPlayer player,
+    required Map<String, dynamic> lineup,
+  }) async {
+    final data = _data ?? const <String, dynamic>{};
+    final fixtureData = _fixtureAsMap(data['fixture']);
+    final team = _fixtureAsMap(lineup['team']);
+    final club = _canonicalKLeagueClub(
+      _kLeagueDisplayTeamName(_fixtureText(team['name'])),
+    );
+    final opponentLabel = _fixtureOpponentLabelForClub(club);
+    final accumulator = _kLeagueRoundScoreBreakdownForPlayerFromDetailShared(
+      data,
+      playerName: player.name,
+      canonicalClub: club,
+      number: player.number,
+      opponentLabel: opponentLabel,
+    );
+    return (
+      displayedPoints: accumulator.basePoints,
+      basePoints: accumulator.basePoints,
+      details: accumulator.details,
+      appeared: accumulator.appeared,
+      opponentLabel: accumulator.opponentLabel ?? opponentLabel,
+      fixtureStarted: _kLeagueFixtureMapHasStarted(fixtureData),
+    );
+  }
+
+  Future<void> _showFixturePlayerMiniProfile({
+    required _LineupPlayer player,
+    required Map<String, dynamic> lineup,
+  }) async {
+    final slot = _fixturePopupSlotFromPlayer(player, lineup);
+    final popupFuture = _loadFixturePlayerPopupData(
+      player: player,
+      lineup: lineup,
+    );
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(
+            horizontal: 24,
+            vertical: 24,
+          ),
+          backgroundColor: Colors.transparent,
+          child:
+              FutureBuilder<
+                ({
+                  double displayedPoints,
+                  double basePoints,
+                  List<_PlayerRoundPointDetail> details,
+                  bool appeared,
+                  String? opponentLabel,
+                  bool fixtureStarted,
+                })
+              >(
+                future: popupFuture,
+                builder: (context, snapshot) {
+                  final theme = Theme.of(context);
+                  final titleStyle = theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: const Color(0xFF101828),
+                  );
+                  final subtitleStyle = theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF667085),
+                  );
+
+                  Widget shell({required Widget child}) {
+                    return Container(
+                      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: const Color(0xFFD6E4FF)),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x14000000),
+                            blurRadius: 24,
+                            offset: Offset(0, 12),
+                          ),
+                        ],
+                      ),
+                      child: child,
+                    );
+                  }
+
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return shell(
+                      child: const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 30),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.6,
+                              ),
+                            ),
+                            SizedBox(height: 14),
+                            Text(
+                              '선수 점수 불러오는 중...',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF475467),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  if (snapshot.hasError || !snapshot.hasData) {
+                    return shell(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(slot.name, style: titleStyle),
+                          const SizedBox(height: 8),
+                          Text('이 경기 점수 상세를 불러오지 못했습니다.', style: subtitleStyle),
+                          const SizedBox(height: 18),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(),
+                                child: const Text('닫기'),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton(
+                                onPressed: () {
+                                  Navigator.of(dialogContext).pop();
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => PlayerProfilePage(
+                                        name: slot.name,
+                                        ownership: PlayerOwnership.freeAgent,
+                                        metaOverride: _DocPlayerMeta(
+                                          position: slot.position,
+                                          club: slot.club,
+                                          number: slot.number,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2D6DFF),
+                                  foregroundColor: Colors.white,
+                                ),
+                                child: const Text('프로필'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  final data = snapshot.data!;
+                  final hasDetails = data.details.isNotEmpty;
+                  return shell(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(slot.name, style: titleStyle),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '${_displayFantasyClubName(slot.club, isSoccer: true)} · ${slot.position}',
+                                    style: subtitleStyle?.copyWith(
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                  if (data.opponentLabel != null &&
+                                      data.opponentLabel!.isNotEmpty) ...[
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      'vs ${data.opponentLabel}',
+                                      style: subtitleStyle?.copyWith(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w900,
+                                        color: const Color(0xFFF28C28),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE9F0FF),
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                              child: Text(
+                                '${data.displayedPoints.toStringAsFixed(1)} pts',
+                                style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFF2D6DFF),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF7FAFF),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(color: const Color(0xFFDCE8FF)),
+                          ),
+                          child: hasDetails
+                              ? Column(
+                                  children: data.details.map((detail) {
+                                    final pointsColor = detail.points < 0
+                                        ? const Color(0xFFD92D20)
+                                        : const Color(0xFF2D6DFF);
+                                    return Padding(
+                                      padding: const EdgeInsets.only(
+                                        bottom: 10,
+                                      ),
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  detail.label,
+                                                  style: const TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w800,
+                                                    color: Color(0xFF344054),
+                                                  ),
+                                                ),
+                                                if (detail.detail != null &&
+                                                    detail.detail!.isNotEmpty)
+                                                  Padding(
+                                                    padding:
+                                                        const EdgeInsets.only(
+                                                          top: 2,
+                                                        ),
+                                                    child: Text(
+                                                      detail.detail!,
+                                                      style: const TextStyle(
+                                                        fontSize: 12,
+                                                        fontWeight:
+                                                            FontWeight.w700,
+                                                        color: Color(
+                                                          0xFF667085,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Text(
+                                            '${detail.points >= 0 ? '+' : ''}${detail.points.toStringAsFixed(1)}',
+                                            style: TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w900,
+                                              color: pointsColor,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                  }).toList(),
+                                )
+                              : Text(
+                                  !data.fixtureStarted
+                                      ? '이 경기는 아직 시작되지 않았습니다.'
+                                      : data.appeared
+                                      ? '이 경기의 세부 점수 항목이 아직 집계되지 않았습니다.'
+                                      : '이 경기에서 출전 기록이 없습니다.',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: Color(0xFF667085),
+                                    height: 1.4,
+                                  ),
+                                ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () {
+                                  Navigator.of(dialogContext).pop();
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => PlayerProfilePage(
+                                        name: slot.name,
+                                        ownership: PlayerOwnership.freeAgent,
+                                        metaOverride: _DocPlayerMeta(
+                                          position: slot.position,
+                                          club: slot.club,
+                                          number: slot.number,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: const Color(0xFF2D6DFF),
+                                  side: const BorderSide(
+                                    color: Color(0xFFBFD3FF),
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: const Text(
+                                  '프로필',
+                                  style: TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () =>
+                                    Navigator.of(dialogContext).pop(),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF2D6DFF),
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                ),
+                                child: const Text(
+                                  '닫기',
+                                  style: TextStyle(fontWeight: FontWeight.w800),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+        );
+      },
+    );
+  }
+
   @override
   void dispose() {
     _refreshTimer?.cancel();
@@ -2343,7 +3225,6 @@ class _KLeagueFixtureDetailPageState extends State<_KLeagueFixtureDetailPage> {
           final league = _fixtureAsMap(fixtureData['league']);
           final teams = _fixtureAsMap(fixtureData['teams']);
           final goals = _fixtureAsMap(fixtureData['goals']);
-          final score = _fixtureAsMap(fixtureData['score']);
           final status = _fixtureAsMap(fixture['status']);
           final venue = _fixtureAsMap(fixture['venue']);
           final home = _fixtureAsMap(teams['home']);
@@ -2381,6 +3262,13 @@ class _KLeagueFixtureDetailPageState extends State<_KLeagueFixtureDetailPage> {
           final minuteLabel = _fixtureMinuteLabel(
             _fixtureText(status['elapsed']),
             _fixtureText(status['extra']),
+          );
+          final venueLabel = _kLeagueVenueKoreanLabel(
+            _fixtureText(venue['name'], widget.fixture.venue),
+            _fixtureText(venue['city']),
+          );
+          final refereeLabel = _kLeagueRefereeKoreanLabel(
+            _fixtureText(fixture['referee']),
           );
           final scorers = _goalScorerRows(
             events,
@@ -2430,6 +3318,14 @@ class _KLeagueFixtureDetailPageState extends State<_KLeagueFixtureDetailPage> {
                               homeTeamId: homeId,
                               awayTeamId: awayId,
                               events: events,
+                              onPlayerTap: (player, lineup) {
+                                unawaited(
+                                  _showFixturePlayerMiniProfile(
+                                    player: player,
+                                    lineup: lineup,
+                                  ),
+                                );
+                              },
                               text: text,
                               muted: muted,
                               border: border,
@@ -2440,6 +3336,14 @@ class _KLeagueFixtureDetailPageState extends State<_KLeagueFixtureDetailPage> {
                           homeTeamId: homeId,
                           awayTeamId: awayId,
                           events: events,
+                          onPlayerTap: (player, lineup) {
+                            unawaited(
+                              _showFixturePlayerMiniProfile(
+                                player: player,
+                                lineup: lineup,
+                              ),
+                            );
+                          },
                           text: text,
                           muted: muted,
                           border: border,
@@ -2462,32 +3366,8 @@ class _KLeagueFixtureDetailPageState extends State<_KLeagueFixtureDetailPage> {
                         '경기 정보',
                         Column(
                           children: [
-                            infoRow(
-                              '경기장',
-                              [
-                                _fixtureText(
-                                  venue['name'],
-                                  widget.fixture.venue,
-                                ),
-                                _fixtureText(venue['city']),
-                              ].where((e) => e.isNotEmpty).join(' · '),
-                            ),
-                            infoRow('심판', _fixtureText(fixture['referee'])),
-                            infoRow(
-                              '상태',
-                              [
-                                statusLabel,
-                                if (minuteLabel.isNotEmpty) minuteLabel,
-                              ].where((e) => e.isNotEmpty).join(' · '),
-                            ),
-                            infoRow(
-                              '하프타임',
-                              _scorePartLabel(score, ['halftime']),
-                            ),
-                            infoRow(
-                              '풀타임',
-                              _scorePartLabel(score, ['fulltime']),
-                            ),
+                            infoRow('경기장', venueLabel),
+                            infoRow('심판', refereeLabel),
                           ],
                         ),
                       ),
@@ -2750,6 +3630,8 @@ class _FixturePitchLineupCard extends StatelessWidget {
   final int? homeTeamId;
   final int? awayTeamId;
   final List<dynamic> events;
+  final void Function(_LineupPlayer player, Map<String, dynamic> lineup)?
+  onPlayerTap;
   final Color text;
   final Color muted;
   final Color border;
@@ -2759,6 +3641,7 @@ class _FixturePitchLineupCard extends StatelessWidget {
     required this.homeTeamId,
     required this.awayTeamId,
     required this.events,
+    this.onPlayerTap,
     required this.text,
     required this.muted,
     required this.border,
@@ -2848,6 +3731,9 @@ class _FixturePitchLineupCard extends StatelessWidget {
                         player: player,
                         isHome: isHome,
                         badges: _badgesForLineupPlayer(badgesByName, player),
+                        onTap: onPlayerTap == null
+                            ? null
+                            : () => onPlayerTap!(player, lineup),
                       ),
                     ),
                   ],
@@ -2902,11 +3788,13 @@ class _PitchPlayerMarker extends StatelessWidget {
   final _LineupPlayer player;
   final bool isHome;
   final List<_EventBadge> badges;
+  final VoidCallback? onTap;
 
   const _PitchPlayerMarker({
     required this.player,
     required this.isHome,
     required this.badges,
+    this.onTap,
   });
 
   @override
@@ -2931,63 +3819,67 @@ class _PitchPlayerMarker extends StatelessWidget {
         )
         .toList();
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: const Color(0xFF126B38),
-                shape: BoxShape.circle,
-                border: Border.all(color: color, width: 2),
-              ),
-              child: Text(
-                player.number,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w900,
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF126B38),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: color, width: 2),
+                ),
+                child: Text(
+                  player.number,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
               ),
-            ),
-            for (int i = 0; i < scoringBadges.take(3).length; i++)
-              Positioned(
-                right: -7 - (i * 10),
-                top: -6,
-                child: _SmallEventBadge(badge: scoringBadges[i]),
-              ),
-            for (int i = 0; i < substitutionBadge.length; i++)
-              Positioned(
-                right: -7,
-                bottom: -4,
-                child: _SmallEventBadge(badge: substitutionBadge[i]),
-              ),
-            for (int i = 0; i < cardBadges.take(2).length; i++)
-              Positioned(
-                left: -5 + (i * 8),
-                top: -5,
-                child: _SmallEventBadge(badge: cardBadges[i]),
-              ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Text(
-          player.name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 9,
-            fontWeight: FontWeight.w800,
+              for (int i = 0; i < scoringBadges.take(3).length; i++)
+                Positioned(
+                  right: -7 - (i * 10),
+                  top: -6,
+                  child: _SmallEventBadge(badge: scoringBadges[i]),
+                ),
+              for (int i = 0; i < substitutionBadge.length; i++)
+                Positioned(
+                  right: -7,
+                  bottom: -4,
+                  child: _SmallEventBadge(badge: substitutionBadge[i]),
+                ),
+              for (int i = 0; i < cardBadges.take(2).length; i++)
+                Positioned(
+                  left: -5 + (i * 8),
+                  top: -5,
+                  child: _SmallEventBadge(badge: cardBadges[i]),
+                ),
+            ],
           ),
-        ),
-      ],
+          const SizedBox(height: 4),
+          Text(
+            player.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -3065,6 +3957,8 @@ class _FixtureBenchCard extends StatelessWidget {
   final int? homeTeamId;
   final int? awayTeamId;
   final List<dynamic> events;
+  final void Function(_LineupPlayer player, Map<String, dynamic> lineup)?
+  onPlayerTap;
   final Color text;
   final Color muted;
   final Color border;
@@ -3075,6 +3969,7 @@ class _FixtureBenchCard extends StatelessWidget {
     required this.homeTeamId,
     required this.awayTeamId,
     required this.events,
+    this.onPlayerTap,
     required this.text,
     required this.muted,
     required this.border,
@@ -3157,6 +4052,7 @@ class _FixtureBenchCard extends StatelessWidget {
         for (int i = 0; i < substitutes.length; i++) ...[
           _benchPlayerRow(
             substitutes[i],
+            lineup,
             alignRight,
             _badgesForLineupPlayer(badgesByName, substitutes[i]),
           ),
@@ -3168,6 +4064,7 @@ class _FixtureBenchCard extends StatelessWidget {
 
   Widget _benchPlayerRow(
     _LineupPlayer player,
+    Map<String, dynamic> lineup,
     bool alignRight,
     List<_EventBadge> badges,
   ) {
@@ -3201,11 +4098,15 @@ class _FixtureBenchCard extends StatelessWidget {
         ),
     ];
 
-    return Row(
-      mainAxisAlignment: alignRight
-          ? MainAxisAlignment.end
-          : MainAxisAlignment.start,
-      children: alignRight ? content.reversed.toList() : content,
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: onPlayerTap == null ? null : () => onPlayerTap!(player, lineup),
+      child: Row(
+        mainAxisAlignment: alignRight
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
+        children: alignRight ? content.reversed.toList() : content,
+      ),
     );
   }
 }
@@ -3789,20 +4690,38 @@ String _kLeagueDisplayPlayerName(
   if (jersey == null) return trimmed;
 
   final club = _canonicalKLeagueClub(_kLeagueDisplayTeamName(teamName));
-  for (final entry in _docRosterEntries) {
-    if (entry.meta.number != jersey) continue;
-    if (_canonicalKLeagueClub(entry.meta.club) == club) return entry.name;
+  final overrideByName =
+      _kLeaguePlayerNameOverridesByClubNumberAndName['$club|$jersey|${_normalizeAsciiWords(trimmed)}'];
+  if (overrideByName != null && overrideByName.isNotEmpty) {
+    return overrideByName;
   }
-
+  final override = _kLeaguePlayerNameOverridesByClubNumber['$club|$jersey'];
+  if (override != null && override.isNotEmpty) {
+    return override;
+  }
+  final rosterName = _kLeagueRosterNameForClubNumber(club, '$jersey');
+  if (rosterName.isNotEmpty) return rosterName;
   return trimmed;
 }
 
 String _canonicalKLeagueClub(String value) {
   return value
       .trim()
-      .replaceAll('제주 유나이티드', '제주 SK')
-      .replaceAll('전북 현대 모터스', '전북 현대')
-      .replaceAll('부천FC', '부천 FC');
+      .replaceAll('제주 유나이티드', '제주')
+      .replaceAll('제주 SK', '제주')
+      .replaceAll('전북 현대 모터스', '전북')
+      .replaceAll('전북 현대', '전북')
+      .replaceAll('부천FC 1995', '부천')
+      .replaceAll('부천 FC 1995', '부천')
+      .replaceAll('FC 안양', '안양')
+      .replaceAll('FC 서울', '서울')
+      .replaceAll('강원 FC', '강원')
+      .replaceAll('포항 스틸러스', '포항')
+      .replaceAll('인천 유나이티드', '인천')
+      .replaceAll('대전 하나 시티즌', '대전')
+      .replaceAll('김천 상무', '김천')
+      .replaceAll('광주 FC', '광주')
+      .replaceAll('울산 HD', '울산');
 }
 
 List<_EventBadge> _badgesForLineupPlayer(
@@ -3885,7 +4804,10 @@ List<_KLeagueFixture> _kLeagueFixturesFromApi(List<dynamic> fixtures) {
           _fixtureText(status['elapsed']),
           _fixtureText(status['extra']),
         ),
-        venue: '${venue['name'] ?? ''}',
+        venue: _kLeagueVenueOrCityKoreanLabel(
+          '${venue['name'] ?? ''}',
+          '${venue['city'] ?? ''}',
+        ),
         round: '${league['round'] ?? ''}',
         homeGoals: _readNullableInt(goals['home']),
         awayGoals: _readNullableInt(goals['away']),
@@ -3953,10 +4875,10 @@ String _fixtureStatusLabel(_KLeagueFixture fixture) {
     case 'FT':
     case 'AET':
     case 'PEN':
-      return 'Finished';
+      return '종료';
     case 'NS':
     case 'TBD':
-      return 'Scheduled';
+      return '예정';
     case '1H':
     case '2H':
     case 'HT':
@@ -3964,11 +4886,11 @@ String _fixtureStatusLabel(_KLeagueFixture fixture) {
     case 'LIVE':
       return 'LIVE';
     case 'PST':
-      return 'Postponed';
+      return '연기';
     case 'CANC':
-      return 'Canceled';
+      return '취소';
     default:
-      return fixture.statusLong.isEmpty ? 'Scheduled' : fixture.statusLong;
+      return fixture.statusLong.isEmpty ? '예정' : fixture.statusLong;
   }
 }
 
@@ -3977,10 +4899,10 @@ String _fixtureDetailStatusLabel(String short, String fallback) {
     case 'FT':
     case 'AET':
     case 'PEN':
-      return 'Final';
+      return '종료';
     case 'NS':
     case 'TBD':
-      return 'Scheduled';
+      return '예정';
     case '1H':
     case '2H':
     case 'HT':
@@ -3988,11 +4910,11 @@ String _fixtureDetailStatusLabel(String short, String fallback) {
     case 'LIVE':
       return 'LIVE';
     case 'PST':
-      return 'Postponed';
+      return '연기';
     case 'CANC':
-      return 'Canceled';
+      return '취소';
     default:
-      return fallback.isEmpty ? 'Scheduled' : fallback;
+      return fallback.isEmpty ? '예정' : fallback;
   }
 }
 
@@ -4026,13 +4948,4 @@ String _fixtureText(dynamic value, [String fallback = '']) {
   final text = '$value'.trim();
   if (text.isEmpty || text == 'null') return fallback;
   return text;
-}
-
-String _scorePartLabel(Map<String, dynamic> score, List<String> keys) {
-  if (keys.isEmpty) return '';
-  final part = _fixtureAsMap(score[keys.first]);
-  final home = _fixtureText(part['home']);
-  final away = _fixtureText(part['away']);
-  if (home.isEmpty && away.isEmpty) return '';
-  return '${home.isEmpty ? '-' : home} : ${away.isEmpty ? '-' : away}';
 }

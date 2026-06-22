@@ -63,6 +63,7 @@ class _MyLeaguePageState extends State<MyLeaguePage> {
     final cs = Theme.of(context).colorScheme;
     await showModalBottomSheet<void>(
       context: context,
+      backgroundColor: cs.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -142,6 +143,7 @@ class _MyLeaguePageState extends State<MyLeaguePage> {
     final cs = Theme.of(context).colorScheme;
     await showModalBottomSheet<void>(
       context: context,
+      backgroundColor: cs.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -204,7 +206,7 @@ class _MyLeaguePageState extends State<MyLeaguePage> {
                 tile(
                   icon: Icons.sports_baseball,
                   title: 'KBO 판타지리그',
-                  subtitle: '야구 드래프트로 생성하며 34라운드로 고정됩니다.',
+                  subtitle: '야구 드래프트로 생성하며 라운드는 자동 계산됩니다.',
                   isSoccer: false,
                 ),
               ],
@@ -267,10 +269,10 @@ class _MyLeaguePageState extends State<MyLeaguePage> {
     if (_leavingLeagueIds.contains(draft.leagueId)) return;
 
     final confirmed = await _showLeaveDialog(
-      title: fromDraftSection ? 'Draft 탈퇴' : '리그 탈퇴',
+      title: fromDraftSection ? '드래프트 탈퇴' : '리그 탈퇴',
       message: fromDraftSection
-          ? '${draft.leagueName} Draft 참여를 취소할까요?\n리그 참가도 함께 해제됩니다.'
-          : '${draft.leagueName}에서 탈퇴할까요?\n해당 Draft 참여도 함께 취소됩니다.',
+          ? '${draft.leagueName} 드래프트 참여를 취소할까요?\n리그 참가도 함께 해제됩니다.'
+          : '${draft.leagueName}에서 탈퇴할까요?\n해당 드래프트 참여도 함께 취소됩니다.',
     );
     if (!confirmed || !mounted) return;
 
@@ -335,8 +337,14 @@ class _MyLeaguePageState extends State<MyLeaguePage> {
                     },
                   )
                 else
-                  ...joinedLeagues.map(
-                    (draft) => _SwipeLeaveTile(
+                  ...joinedLeagues.map((draft) {
+                    final canOpenLeagueDetail =
+                        draft.fantasyReady &&
+                        draft.fantasyTeams.isNotEmpty &&
+                        draft.fantasySchedule.isNotEmpty &&
+                        !_leavingLeagueIds.contains(draft.leagueId);
+                    final isComingSoon = !draft.isSoccer && !draft.fantasyReady;
+                    return _SwipeLeaveTile(
                       key: ValueKey('league-${draft.leagueId}'),
                       enabled: !_leavingLeagueIds.contains(draft.leagueId),
                       actionPadding: const EdgeInsets.only(bottom: 12),
@@ -344,46 +352,39 @@ class _MyLeaguePageState extends State<MyLeaguePage> {
                       onLeaveTap: () =>
                           _leaveLeague(draft, fromDraftSection: false),
                       child: _LeagueSummaryCard(
-                        title: draft.leagueName,
-                        record: '실시간 경기/포인트 데이터 연동 예정',
-                        rank: '리그 순위 연동 예정',
-                        nextMatch:
-                            'Draft: ${_kstMonthDayTimeLabel(draft.when)}',
-                        isSoccer: draft.isSoccer,
+                        draft: draft,
+                        comingSoon: isComingSoon,
                         trailingBusy: _leavingLeagueIds.contains(
                           draft.leagueId,
                         ),
-                        onTap: _leavingLeagueIds.contains(draft.leagueId)
-                            ? null
-                            : () {
+                        onTap: canOpenLeagueDetail
+                            ? () {
                                 Navigator.push(
                                   context,
-                                  MaterialPageRoute(
-                                    builder: (_) => MatchDetailPage(
-                                      isSoccer: draft.isSoccer,
-                                      draft: draft,
-                                      initialSection: _MatchSection.league,
-                                    ),
+                                  _matchDetailPageRoute(
+                                    isSoccer: draft.isSoccer,
+                                    draft: draft,
+                                    initialSection: _MatchSection.league,
                                   ),
                                 );
-                              },
+                              }
+                            : null,
                       ),
-                    ),
-                  ),
+                    );
+                  }),
                 if (joinedLeagues.isNotEmpty) ...[
                   const SizedBox(height: 12),
-                  OutlinedButton.icon(
+                  OutlinedButton(
                     onPressed: () {
                       unawaited(_showLeagueEntryOptions());
                     },
-                    icon: const Icon(Icons.add),
-                    label: const Text('새 리그 생성'),
+                    child: const Text('리그 생성 / 리그 참가'),
                   ),
                   const SizedBox(height: 16),
                   Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      '참가 중인 Draft',
+                      '참가 중인 드래프트',
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         color: cs.onSurface,
@@ -403,7 +404,7 @@ class _MyLeaguePageState extends State<MyLeaguePage> {
                         ),
                       ),
                       child: Text(
-                        '참가 중인 Draft가 없습니다.',
+                        '참가 중인 드래프트가 없습니다.',
                         style: TextStyle(color: cs.onSurface.withOpacity(0.75)),
                       ),
                     )
@@ -433,28 +434,6 @@ class _MyLeaguePageState extends State<MyLeaguePage> {
                       ),
                     ),
                 ],
-                const SizedBox(height: 24),
-                Text(
-                  '최근 활동',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: cs.surface.withOpacity(0.9),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: cs.onSurface.withOpacity(0.08)),
-                  ),
-                  child: Text(
-                    '최근 활동은 실데이터 연동 이후 제공됩니다.',
-                    style: TextStyle(color: cs.onSurface.withOpacity(0.75)),
-                  ),
-                ),
               ],
             ),
           ),
@@ -463,31 +442,19 @@ class _MyLeaguePageState extends State<MyLeaguePage> {
               onTap: _toggleMyPage,
               child: Container(color: Colors.black.withOpacity(0.35)),
             ),
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeOutBack,
-            top: _isMyPageOpen ? 100 : 20,
-            right: _isMyPageOpen ? 24 : 12,
-            child: AnimatedScale(
-              duration: const Duration(milliseconds: 400),
-              scale: _isMyPageOpen ? 1.0 : 0.2,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 250),
-                opacity: _isMyPageOpen ? 1 : 0,
-                child: MyPageCard(
-                  isLoggedIn: homeKey.currentState?.isLoggedIn ?? false,
-                  onLogin: () {
-                    homeKey.currentState?.updateLogin(true);
-                    Navigator.pop(context);
-                  },
-                  onLogout: () {
-                    homeKey.currentState?.updateLogin(false);
-                    homeKey.currentState?.closePanels();
-                    Navigator.pop(context);
-                  },
-                ),
-              ),
-            ),
+          _MyPagePopupOverlay(
+            isOpen: _isMyPageOpen,
+            onDismiss: _toggleMyPage,
+            isLoggedIn: homeKey.currentState?.isLoggedIn ?? false,
+            onLogin: () {
+              homeKey.currentState?.updateLogin(true);
+              Navigator.pop(context);
+            },
+            onLogout: () {
+              homeKey.currentState?.updateLogin(false);
+              homeKey.currentState?.closePanels();
+              Navigator.pop(context);
+            },
           ),
         ],
       ),
@@ -496,19 +463,13 @@ class _MyLeaguePageState extends State<MyLeaguePage> {
 }
 
 class _LeagueSummaryCard extends StatelessWidget {
-  final String title;
-  final String record;
-  final String rank;
-  final String nextMatch;
-  final bool isSoccer;
+  final _JoinedDraft draft;
+  final bool comingSoon;
   final VoidCallback? onTap;
   final bool trailingBusy;
   const _LeagueSummaryCard({
-    required this.title,
-    required this.record,
-    required this.rank,
-    required this.nextMatch,
-    required this.isSoccer,
+    required this.draft,
+    this.comingSoon = false,
     this.onTap,
     this.trailingBusy = false,
   });
@@ -516,22 +477,205 @@ class _LeagueSummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final bool comingSoon = !isSoccer;
+    final palette = _leagueItSurfacePalette(context);
+    final now = DateTime.now();
+    final accent = draft.isSoccer
+        ? const Color(0xFF1FA45A)
+        : const Color(0xFFE36A1D);
+    final isFantasyLive =
+        draft.fantasyReady &&
+        draft.fantasyTeams.isNotEmpty &&
+        draft.fantasySchedule.isNotEmpty;
+    final currentRound = isFantasyLive
+        ? _currentFantasyRoundAt(draft, now)
+        : null;
+    final matchup = isFantasyLive
+        ? _currentFantasyMatchupForDraft(draft)
+        : null;
+    final myTeamName = _currentUserFantasyTeamName(draft) ?? '내 팀 미정';
+    _FantasyTeamState? myTeam;
+    if (matchup != null) {
+      myTeam = matchup.myTeam;
+    } else {
+      for (final team in draft.fantasyTeams) {
+        if (team.teamName == myTeamName) {
+          myTeam = team;
+          break;
+        }
+      }
+    }
+    final isDraftDone = _isDraftCompletedAt(draft, now);
+    final sportLabel = draft.isSoccer ? 'K League' : 'KBO';
+    final statusLabel = comingSoon
+        ? '준비 중'
+        : isFantasyLive
+        ? '진행 중'
+        : isDraftDone
+        ? '동기화 중'
+        : '드래프트 예정';
+    final statusBg = comingSoon
+        ? cs.onSurface.withValues(alpha: 0.08)
+        : accent.withValues(alpha: 0.14);
+    final statusFg = comingSoon ? cs.onSurface : accent;
+
+    Widget metaChip(IconData icon, String label) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: palette.tileSurface,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: palette.cardBorder),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: palette.mutedInk),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: palette.mutedInk,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget matchupPanel() {
+      if (comingSoon) {
+        return Text(
+          'KBO 실시간 리그 데이터 연동 준비 중입니다.',
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.45,
+            color: cs.onSurface.withValues(alpha: 0.70),
+            fontWeight: FontWeight.w700,
+          ),
+        );
+      }
+      if (!isFantasyLive) {
+        return Text(
+          isDraftDone
+              ? '드래프트는 완료됐고 리그 데이터를 정리하고 있습니다.'
+              : '드래프트 시작 시각: ${_kstMonthDayTimeLabel(draft.when)}',
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.45,
+            color: cs.onSurface.withValues(alpha: 0.70),
+            fontWeight: FontWeight.w700,
+          ),
+        );
+      }
+      if (matchup == null) {
+        return Text(
+          '현재 라운드 매치업을 불러오는 중입니다.',
+          style: TextStyle(
+            fontSize: 13,
+            height: 1.45,
+            color: cs.onSurface.withValues(alpha: 0.70),
+            fontWeight: FontWeight.w700,
+          ),
+        );
+      }
+
+      final leftScore = matchup.scoresReady
+          ? _formatFantasyFixtureScore(matchup.myScore)
+          : '0.0';
+      final rightScore = matchup.scoresReady
+          ? _formatFantasyFixtureScore(matchup.opponentScore)
+          : '0.0';
+      return Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(
+          color: palette.tileSurface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: palette.cardBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '${currentRound ?? matchup.round} 라운드 매치업',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w900,
+                color: palette.mutedInk,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    matchup.myTeam.teamName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: palette.ink,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  '$leftScore : $rightScore',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: palette.ink,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    matchup.opponent.teamName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: palette.ink,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              matchup.scoresReady ? '현재 예상/실시간 점수' : '점수 집계 준비 중',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: palette.mutedInk,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(24),
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
-          color: cs.surface.withOpacity(0.9),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: cs.onSurface.withOpacity(0.08)),
+          color: palette.fieldFill,
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: palette.cardBorder),
           boxShadow: [
             BoxShadow(
-              color: cs.onSurface.withOpacity(0.06),
-              blurRadius: 10,
-              offset: const Offset(0, 6),
+              color: Colors.black.withValues(
+                alpha: palette.isDark ? 0.18 : 0.05,
+              ),
+              blurRadius: 14,
+              offset: const Offset(0, 8),
             ),
           ],
         ),
@@ -540,56 +684,128 @@ class _LeagueSummaryCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: palette.tileSurface,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: accent.withValues(alpha: 0.24)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        draft.isSoccer
+                            ? Icons.sports_soccer
+                            : Icons.sports_baseball,
+                        size: 14,
+                        color: accent,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        sportLabel,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          color: accent,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                const Spacer(),
                 if (trailingBusy)
                   SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2.2,
-                      color: cs.primary,
+                      color: accent,
                     ),
                   )
                 else
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 10,
-                      vertical: 4,
+                      vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: comingSoon
-                          ? Colors.black.withOpacity(0.06)
-                          : cs.primary.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(10),
+                      color: statusBg,
+                      borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
-                      comingSoon ? '준비 중' : rank,
+                      statusLabel,
                       style: TextStyle(
-                        fontSize: 12,
-                        color: comingSoon ? cs.onSurface : cs.primary,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: statusFg,
                       ),
                     ),
                   ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 16),
             Text(
-              comingSoon ? 'KBO 기능은 준비 중입니다.' : record,
-              style: TextStyle(color: cs.onSurface.withOpacity(0.7)),
+              draft.leagueName,
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w900,
+                color: palette.ink,
+                height: 1.0,
+              ),
             ),
-            const SizedBox(height: 4),
-            Text(
-              comingSoon ? '곧 업데이트될 예정이에요.' : nextMatch,
-              style: TextStyle(color: cs.onSurface.withOpacity(0.7)),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                _FantasyTeamAvatar(
+                  uid: myTeam?.uid ?? '',
+                  teamName: myTeam?.teamName ?? myTeamName,
+                  size: 42,
+                  iconSize: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '내 팀',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: palette.mutedInk,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        myTeam?.teamName ?? myTeamName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: palette.ink,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            matchupPanel(),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (currentRound != null)
+                  metaChip(Icons.layers_outlined, '$currentRound 라운드'),
+                metaChip(Icons.groups_rounded, '${draft.teamCount}팀'),
+              ],
             ),
           ],
         ),

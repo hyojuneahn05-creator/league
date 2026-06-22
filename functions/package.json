@@ -6,6 +6,7 @@
     "serve": "firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",
+    "sync:kbo-directory": "node scripts/sync_kbo_player_directory.js",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log"
   },

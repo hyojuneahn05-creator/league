@@ -42,34 +42,22 @@ class _SimplePageState extends State<SimplePage> {
           if (_isMyPageOpen)
             GestureDetector(
               onTap: _toggleMyPage,
-              child: Container(color: Colors.black.withOpacity(0.35)),
+              child: Container(color: Colors.black.withValues(alpha: 0.35)),
             ),
 
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 400),
-            curve: Curves.easeOutBack,
-            top: _isMyPageOpen ? 100 : 20,
-            right: _isMyPageOpen ? 24 : 12,
-            child: AnimatedScale(
-              duration: const Duration(milliseconds: 400),
-              scale: _isMyPageOpen ? 1.0 : 0.2,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 250),
-                opacity: _isMyPageOpen ? 1 : 0,
-                child: MyPageCard(
-                  isLoggedIn: homeKey.currentState?.isLoggedIn ?? false,
-                  onLogin: () {
-                    homeKey.currentState?.updateLogin(true);
-                    Navigator.pop(context);
-                  },
-                  onLogout: () {
-                    homeKey.currentState?.updateLogin(false);
-                    homeKey.currentState?.closePanels();
-                    Navigator.pop(context);
-                  },
-                ),
-              ),
-            ),
+          _MyPagePopupOverlay(
+            isOpen: _isMyPageOpen,
+            onDismiss: _toggleMyPage,
+            isLoggedIn: homeKey.currentState?.isLoggedIn ?? false,
+            onLogin: () {
+              homeKey.currentState?.updateLogin(true);
+              Navigator.pop(context);
+            },
+            onLogout: () {
+              homeKey.currentState?.updateLogin(false);
+              homeKey.currentState?.closePanels();
+              Navigator.pop(context);
+            },
           ),
         ],
       ),
@@ -79,14 +67,22 @@ class _SimplePageState extends State<SimplePage> {
 
 class LeagueItSubAppBar extends StatefulWidget implements PreferredSizeWidget {
   final VoidCallback onMyPageTap;
+  final VoidCallback? onHelpTap;
+  final void Function(BuildContext anchorContext)? onNotificationTap;
+  final int notificationCount;
   final String? title;
   final bool showSearch;
+  final Widget Function(BuildContext context, Widget child)? wrapHelpButton;
 
   const LeagueItSubAppBar({
     super.key,
     required this.onMyPageTap,
+    this.onHelpTap,
+    this.onNotificationTap,
+    this.notificationCount = 0,
     this.title,
     this.showSearch = true,
+    this.wrapHelpButton,
   });
 
   @override
@@ -134,9 +130,28 @@ class _LeagueItSubAppBarState extends State<LeagueItSubAppBar> {
 
   @override
   Widget build(BuildContext context) {
+    final palette = _leagueItSurfacePalette(context);
+    final iconColor = palette.ink;
+    final borderColor = palette.cardBorder;
+    Widget helpButton = GestureDetector(
+      onTap: widget.onHelpTap,
+      child: Container(
+        margin: const EdgeInsets.only(right: 12),
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: borderColor),
+        ),
+        child: Icon(Icons.help_outline_rounded, size: 18, color: iconColor),
+      ),
+    );
+    if (widget.wrapHelpButton != null) {
+      helpButton = widget.wrapHelpButton!(context, helpButton);
+    }
     return AppBar(
       automaticallyImplyLeading: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       elevation: 0,
       centerTitle: true,
 
@@ -150,8 +165,8 @@ class _LeagueItSubAppBarState extends State<LeagueItSubAppBar> {
           opacity: _isSearching ? 0 : 1,
           child: Text(
             widget.title ?? "LeagueIt",
-            style: const TextStyle(
-              color: Colors.black,
+            style: TextStyle(
+              color: iconColor,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -175,7 +190,7 @@ class _LeagueItSubAppBarState extends State<LeagueItSubAppBar> {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  const Center(child: Icon(Icons.search, color: Colors.black)),
+                  Center(child: Icon(Icons.search, color: iconColor)),
                   if (_isSearching)
                     Positioned(
                       bottom: -2,
@@ -206,7 +221,7 @@ class _LeagueItSubAppBarState extends State<LeagueItSubAppBar> {
                       width: _isSearching
                           ? MediaQuery.of(context).size.width * 0.45
                           : 0,
-                      decoration: const BoxDecoration(color: Colors.black),
+                      decoration: BoxDecoration(color: iconColor),
                     ),
                   ),
                 ],
@@ -215,6 +230,58 @@ class _LeagueItSubAppBarState extends State<LeagueItSubAppBar> {
           ),
 
         if (widget.showSearch) const SizedBox(width: 12),
+
+        if (widget.onHelpTap != null) helpButton,
+
+        if (widget.onNotificationTap != null) ...[
+          Builder(
+            builder: (anchorContext) {
+              return GestureDetector(
+                onTap: () => widget.onNotificationTap?.call(anchorContext),
+                child: Container(
+                  margin: const EdgeInsets.only(right: 12),
+                  width: 32,
+                  height: 32,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Container(
+                        width: 32,
+                        height: 32,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: borderColor),
+                        ),
+                        child: Icon(
+                          Icons.notifications_none,
+                          size: 18,
+                          color: iconColor,
+                        ),
+                      ),
+                      if (widget.notificationCount > 0)
+                        Positioned(
+                          top: -1,
+                          right: -1,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE53935),
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: palette.pageBackground,
+                                width: 1.2,
+                              ),
+                            ),
+                            width: 10,
+                            height: 10,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
 
         /// 👤 MY PAGE
         GestureDetector(
@@ -225,13 +292,9 @@ class _LeagueItSubAppBarState extends State<LeagueItSubAppBar> {
             height: 32,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.black),
+              border: Border.all(color: borderColor),
             ),
-            child: const Icon(
-              Icons.person_outline,
-              size: 18,
-              color: Colors.black,
-            ),
+            child: Icon(Icons.person_outline, size: 18, color: iconColor),
           ),
         ),
       ],

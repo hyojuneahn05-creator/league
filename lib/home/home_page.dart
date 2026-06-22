@@ -22,6 +22,7 @@ import 'package:leagueit/services/api_service.dart';
 import 'package:leagueit/services/league_service.dart';
 import 'package:leagueit/services/push_notification_service.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:showcaseview/showcaseview.dart';
 
 part 'widgets/custom_app_bar.dart';
 part 'widgets/my_page_card.dart';
@@ -45,6 +46,7 @@ part 'pages/my_league_page.dart';
 part 'pages/about_page.dart';
 part 'pages/playbook_page.dart';
 part 'pages/settings_page.dart';
+part 'pages/app_onboarding_page.dart';
 part 'pages/draft_page.dart';
 part 'pages/player_profile_page.dart';
 part 'data/doc_player_meta.dart';
@@ -1797,6 +1799,91 @@ int _currentFantasyRoundAt(_JoinedDraft draft, DateTime now) {
   return round.clamp(1, roundCount);
 }
 
+_KboFantasyRoundWindow? _kboFantasyRoundWindowForFantasyRound(
+  _JoinedDraft draft,
+  int fantasyRound,
+) {
+  if (draft.isSoccer || fantasyRound <= 0) return null;
+  final mappedRound = _mappedKboRoundForFantasyRound(draft, fantasyRound);
+  return _kboFantasyRoundWindows2026.cast<_KboFantasyRoundWindow?>().firstWhere(
+    (entry) => entry?.round == mappedRound,
+    orElse: () => null,
+  );
+}
+
+DateTime? _kboHomeMatchupAdvanceAtForRound(
+  _JoinedDraft draft,
+  int fantasyRound,
+) {
+  if (draft.isSoccer || fantasyRound <= 0) return null;
+
+  final rawMatches = _fixtureAsList(_cachedKboLeagueData?['matches']);
+  final leagueRound = _mappedKboRoundForFantasyRound(draft, fantasyRound);
+  DateTime? latestScheduledKst;
+
+  for (final raw in rawMatches) {
+    final match = _fixtureAsMap(raw);
+    final matchDate = DateTime.tryParse(_fixtureText(match['date']));
+    if (matchDate == null ||
+        _kboFantasyRoundForMatchDate(matchDate) != leagueRound) {
+      continue;
+    }
+
+    final utc = _kboUtcDateTime(
+      '${match['dateUtc'] ?? ''}',
+      '${match['timeUtc'] ?? ''}',
+    );
+    final fallbackTime = _fixtureText(match['time']);
+    final normalizedTime = RegExp(r'^\d{2}:\d{2}$').hasMatch(fallbackTime)
+        ? '$fallbackTime:00'
+        : fallbackTime;
+    final fallbackLocal = fallbackTime.isEmpty
+        ? DateTime(matchDate.year, matchDate.month, matchDate.day, 23, 59, 59)
+        : DateTime.tryParse(
+            '${matchDate.toIso8601String().substring(0, 10)}T$normalizedTime',
+          );
+    final scheduledKst = utc != null ? _toKst(utc) : fallbackLocal;
+    if (scheduledKst == null) continue;
+    if (latestScheduledKst == null ||
+        scheduledKst.isAfter(latestScheduledKst)) {
+      latestScheduledKst = scheduledKst;
+    }
+  }
+
+  if (latestScheduledKst != null) {
+    return latestScheduledKst.add(_kboHomeMatchupAdvanceDelay);
+  }
+
+  final window = _kboFantasyRoundWindowForFantasyRound(draft, fantasyRound);
+  if (window == null) return null;
+  return DateTime(
+    window.endKst.year,
+    window.endKst.month,
+    window.endKst.day,
+    23,
+    59,
+    59,
+  ).add(_kboHomeMatchupAdvanceDelay);
+}
+
+int _homeDisplayedFantasyRoundAt(_JoinedDraft draft, DateTime now) {
+  final currentRound = _currentFantasyRoundAt(draft, now);
+  if (draft.isSoccer || currentRound >= draft.roundCount) {
+    return currentRound;
+  }
+  if (!_kboFantasyRoundHasStarted(draft, currentRound, now)) {
+    return currentRound;
+  }
+  if (!_kboFantasyRoundAllGamesTerminal(draft, currentRound, now: now)) {
+    return currentRound;
+  }
+  final advanceAt = _kboHomeMatchupAdvanceAtForRound(draft, currentRound);
+  if (advanceAt == null || now.isBefore(advanceAt)) {
+    return currentRound;
+  }
+  return min(draft.roundCount, currentRound + 1);
+}
+
 class _KLeagueRoundWindow {
   final int round;
   final DateTime startUtc;
@@ -1812,6 +1899,7 @@ class _KLeagueRoundWindow {
 const int _kLeagueFantasyTotalRounds2026 = 33;
 const Duration _kLeagueRoundAdvanceDelay = Duration(hours: 12);
 const Duration _kLeagueFixtureDurationEstimate = Duration(hours: 2);
+const Duration _kboHomeMatchupAdvanceDelay = Duration(hours: 12);
 
 DateTime? _kLeagueFixtureEstimatedEndUtc(Map<String, dynamic> fixtureMap) {
   final fixture = _fixtureAsMap(fixtureMap['fixture']);
@@ -2356,6 +2444,12 @@ String _kLeagueRosterNameForClubNumber(String club, String number) {
       return entry.name;
     }
   }
+  final transferred = _kLeagueTransferredRosterNameForClubNumber(
+    canonicalClub,
+    jersey,
+    asOf: DateTime.now(),
+  );
+  if (transferred.isNotEmpty) return transferred;
   return '';
 }
 
@@ -2795,7 +2889,7 @@ _computeFantasySoccerRoundScoreSnapshot(
           }
         }
       }
-      final meta = _resolvePlayerMeta(player.name);
+      final meta = _resolvePlayerMeta(player.name, asOf: DateTime.now());
       return baseByClubAndPlayer['${_canonicalKLeagueClub(meta.club)}|${player.name}'] ??
           0;
     }
@@ -2816,7 +2910,7 @@ _computeFantasySoccerRoundScoreSnapshot(
           }
         }
       }
-      final meta = _resolvePlayerMeta(player.name);
+      final meta = _resolvePlayerMeta(player.name, asOf: DateTime.now());
       return appearedKeys.contains(
         '${_canonicalKLeagueClub(meta.club)}|${player.name}',
       );
@@ -3251,6 +3345,17 @@ double _fantasyTeamRoundScore(
     round: round,
   );
   if (unlockedSnapshot != null) return unlockedSnapshot;
+  final persistedCacheKey = _kboVisibleTeamScoresCacheKeyForRound(draft, round);
+  if (!_freshKboVisibleTeamScoresKeys.contains(persistedCacheKey)) {
+    final persisted = _persistedKboVisibleTeamScoreForTeam(
+      team,
+      draft: draft,
+      round: round,
+    );
+    if (persisted != null) {
+      return persisted;
+    }
+  }
   final state = _kboRoundScoreStateForTeam(team, round);
   final baselines = state?.starterBaselines ?? const <String, double>{};
   final bankedScore = state?.bankedScore ?? 0.0;
@@ -3303,7 +3408,11 @@ String? _currentUserFantasyTeamName(_JoinedDraft draft) {
 
 String? _currentUserFantasyUid() => FirebaseAuth.instance.currentUser?.uid;
 
-_FantasyMatchupView? _currentFantasyMatchupForDraft(_JoinedDraft draft) {
+_FantasyMatchupView? _currentFantasyMatchupForDraft(
+  _JoinedDraft draft, {
+  bool preferHomeDisplayRound = false,
+  int? forcedRound,
+}) {
   if (!draft.fantasyReady ||
       draft.fantasyTeams.isEmpty ||
       draft.fantasySchedule.isEmpty) {
@@ -3324,7 +3433,12 @@ _FantasyMatchupView? _currentFantasyMatchupForDraft(_JoinedDraft draft) {
     return null;
   }
 
-  final round = _currentFantasyRoundAt(draft, DateTime.now());
+  final now = DateTime.now();
+  final round = forcedRound != null && forcedRound > 0
+      ? min(max(1, forcedRound), max(1, draft.roundCount))
+      : preferHomeDisplayRound
+      ? _homeDisplayedFantasyRoundAt(draft, now)
+      : _currentFantasyRoundAt(draft, now);
   final roundMatchups = draft.fantasySchedule
       .where((item) => item.round == round)
       .toList(growable: false);
@@ -3448,7 +3562,9 @@ List<_FantasyTeamPlayer> _parseFantasyTeamPlayers(
     final number = map['number'] is int
         ? map['number'] as int
         : int.tryParse('${map['number'] ?? 0}') ?? 0;
-    final fallbackMeta = isSoccer ? _resolvePlayerMeta(name) : null;
+    final fallbackMeta = isSoccer
+        ? _resolvePlayerMeta(name, asOf: DateTime.now())
+        : null;
     final resolvedClub = club.isNotEmpty ? club : (fallbackMeta?.club ?? '');
     final resolvedNumber = number > 0 ? number : (fallbackMeta?.number ?? 0);
     return _FantasyTeamPlayer(
@@ -3905,7 +4021,9 @@ List<List<_PlayerSlot?>> _parseDraftBoard(
       final number = map['number'] is int
           ? map['number'] as int
           : int.tryParse('${map['number'] ?? 0}') ?? 0;
-      final fallbackMeta = isSoccer ? _resolvePlayerMeta(name) : null;
+      final fallbackMeta = isSoccer
+          ? _resolvePlayerMeta(name, asOf: DateTime.now())
+          : null;
       final resolvedClub = club.isNotEmpty ? club : (fallbackMeta?.club ?? '');
       final resolvedNumber = number > 0 ? number : (fallbackMeta?.number ?? 0);
       return _PlayerSlot(
@@ -3978,8 +4096,26 @@ const List<String> _kboDraftClubs = [
 
 const String _kboDraftPlayerDirectoryAsset = 'docs/kbo_players_season_2026.txt';
 
+class _KboDraftDirectoryEntry {
+  final String englishName;
+  final String koreanName;
+  final String club;
+  final String position;
+  final int number;
+
+  const _KboDraftDirectoryEntry({
+    required this.englishName,
+    required this.koreanName,
+    required this.club,
+    required this.position,
+    required this.number,
+  });
+}
+
 List<_PlayerSlot>? _kboDraftPlayerPoolCache;
 Future<List<_PlayerSlot>>? _kboDraftPlayerPoolFuture;
+List<_KboDraftDirectoryEntry>? _kboDraftPlayerDirectoryCache;
+Future<List<_KboDraftDirectoryEntry>>? _kboDraftPlayerDirectoryFuture;
 
 String _normalizeKboDraftClub(String value) {
   switch (value.trim()) {
@@ -4051,6 +4187,239 @@ String? _normalizeKboDraftPosition(String value) {
   }
 }
 
+String _normalizeKboDirectoryName(String value) {
+  return value
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp("[.\\-'\"]"), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ');
+}
+
+String _normalizeKboLatinDirectoryName(String value) {
+  return value
+      .replaceAll(RegExp(r'[^A-Za-z]+'), ' ')
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'\s+'), ' ');
+}
+
+String _reverseKboLatinDirectoryName(String value) {
+  final normalized = _normalizeKboLatinDirectoryName(value);
+  if (normalized.isEmpty) return '';
+  return normalized
+      .split(' ')
+      .where((part) => part.isNotEmpty)
+      .toList()
+      .reversed
+      .join(' ');
+}
+
+String _normalizeKboPlayablePosition(String value) {
+  switch (value.trim().toUpperCase()) {
+    case 'P':
+    case 'PITCHER':
+    case 'STARTING PITCHER':
+    case 'RELIEF PITCHER':
+      return 'P';
+    case 'C':
+    case 'CATCHER':
+      return 'C';
+    case '1B':
+    case 'FIRST BASEMAN':
+    case 'FIRST BASE':
+      return '1B';
+    case '2B':
+    case 'SECOND BASEMAN':
+    case 'SECOND BASE':
+      return '2B';
+    case '3B':
+    case 'THIRD BASEMAN':
+    case 'THIRD BASE':
+      return '3B';
+    case 'SS':
+    case 'SHORTSTOP':
+      return 'SS';
+    case 'LF':
+    case 'LEFT FIELDER':
+    case 'LEFT FIELD':
+      return 'LF';
+    case 'CF':
+    case 'CENTER FIELDER':
+    case 'CENTER FIELD':
+      return 'CF';
+    case 'RF':
+    case 'RIGHT FIELDER':
+    case 'RIGHT FIELD':
+      return 'RF';
+    case 'DH':
+    case 'DESIGNATED HITTER':
+      return 'DH';
+    case 'IF':
+    case 'INFIELDER':
+      return 'IF';
+    case 'OF':
+    case 'OUTFIELDER':
+      return 'OF';
+    case 'COACH':
+    case 'HEAD COACH':
+    case 'BENCH COACH':
+    case 'MANAGER':
+    case 'FIELD MANAGER':
+    case 'TRAINER':
+      return '';
+    default:
+      return '';
+  }
+}
+
+String _kboClubNumberLookupKey(String club, int number) =>
+    '${_normalizeKboDraftClub(club)}|$number';
+
+List<_KboDraftDirectoryEntry> _parseKboDraftPlayerDirectory(String raw) {
+  final seen = <String>{};
+  final entries = <_KboDraftDirectoryEntry>[];
+  for (final line in raw.split(RegExp(r'\r?\n'))) {
+    final parts = line.split('|').map((part) => part.trim()).toList();
+    if (parts.length < 5) continue;
+    final englishName = parts[0];
+    final koreanName = parts[1];
+    final club = _normalizeKboDraftClub(parts[2]);
+    final position = _normalizeKboDraftPosition(parts[3]);
+    final number = int.tryParse(parts[4]) ?? 0;
+    if ((englishName.isEmpty && koreanName.isEmpty) ||
+        club.isEmpty ||
+        position == null) {
+      continue;
+    }
+    final dedupeName = englishName.isNotEmpty ? englishName : koreanName;
+    final dedupeKey = '$club|$number|$position|$dedupeName|$koreanName';
+    if (!seen.add(dedupeKey)) continue;
+    entries.add(
+      _KboDraftDirectoryEntry(
+        englishName: englishName,
+        koreanName: koreanName,
+        club: club,
+        position: position,
+        number: number,
+      ),
+    );
+  }
+  return entries;
+}
+
+Future<List<_KboDraftDirectoryEntry>> _loadKboDraftPlayerDirectory() {
+  final cached = _kboDraftPlayerDirectoryCache;
+  if (cached != null) return Future.value(cached);
+  final inFlight = _kboDraftPlayerDirectoryFuture;
+  if (inFlight != null) return inFlight;
+
+  final future = rootBundle
+      .loadString(_kboDraftPlayerDirectoryAsset)
+      .then((raw) {
+        final parsed = _parseKboDraftPlayerDirectory(raw);
+        _kboDraftPlayerDirectoryCache = parsed;
+        return parsed;
+      })
+      .catchError((Object error) {
+        debugPrint('Unable to load KBO draft player directory: $error');
+        const fallback = <_KboDraftDirectoryEntry>[];
+        _kboDraftPlayerDirectoryCache = fallback;
+        return fallback;
+      });
+  _kboDraftPlayerDirectoryFuture = future.whenComplete(() {
+    _kboDraftPlayerDirectoryFuture = null;
+  });
+  return _kboDraftPlayerDirectoryFuture!;
+}
+
+_KboDraftDirectoryEntry? _kboDraftDirectoryEntryFor({
+  required String club,
+  String rawName = '',
+  int number = 0,
+}) {
+  final entries = _kboDraftPlayerDirectoryCache;
+  if (entries == null || entries.isEmpty) return null;
+  final normalizedClub = _normalizeKboDraftClub(club);
+  final normalizedRawName = _normalizeKboDirectoryName(rawName);
+  final normalizedLatinRawName = _normalizeKboLatinDirectoryName(rawName);
+  final reversedLatinRawName = _reverseKboLatinDirectoryName(rawName);
+
+  bool nameMatches(_KboDraftDirectoryEntry entry) {
+    if (normalizedRawName.isEmpty) return true;
+    final normalizedEnglish = _normalizeKboDirectoryName(entry.englishName);
+    final normalizedKorean = _normalizeKboDirectoryName(entry.koreanName);
+    if (normalizedEnglish == normalizedRawName ||
+        normalizedKorean == normalizedRawName) {
+      return true;
+    }
+
+    if (normalizedLatinRawName.isEmpty && reversedLatinRawName.isEmpty) {
+      return false;
+    }
+    final normalizedLatinEnglish = _normalizeKboLatinDirectoryName(
+      entry.englishName,
+    );
+    final reversedLatinEnglish = _reverseKboLatinDirectoryName(
+      entry.englishName,
+    );
+    return normalizedLatinEnglish == normalizedLatinRawName ||
+        normalizedLatinEnglish == reversedLatinRawName ||
+        reversedLatinEnglish == normalizedLatinRawName ||
+        reversedLatinEnglish == reversedLatinRawName;
+  }
+
+  if (number > 0) {
+    for (final entry in entries) {
+      if (entry.club != normalizedClub || entry.number != number) continue;
+      if (nameMatches(entry)) return entry;
+    }
+    for (final entry in entries) {
+      if (entry.club == normalizedClub && entry.number == number) {
+        return entry;
+      }
+    }
+  }
+
+  if (normalizedRawName.isEmpty) return null;
+  for (final entry in entries) {
+    if (entry.club != normalizedClub) continue;
+    if (nameMatches(entry)) return entry;
+  }
+  return null;
+}
+
+String _kboDisplayPlayerName(
+  String rawName, {
+  required String club,
+  int number = 0,
+}) {
+  final normalizedRawName = rawName.trim();
+  if (normalizedRawName.isEmpty) return normalizedRawName;
+  final entry = _kboDraftDirectoryEntryFor(
+    club: club,
+    rawName: normalizedRawName,
+    number: number,
+  );
+  final koreanName = entry?.koreanName.trim() ?? '';
+  return koreanName.isNotEmpty ? koreanName : normalizedRawName;
+}
+
+String _resolveKboPlayerPosition(
+  String rawPosition, {
+  required String club,
+  String rawName = '',
+  int number = 0,
+}) {
+  final normalized = _normalizeKboPlayablePosition(rawPosition);
+  if (normalized.isNotEmpty) return normalized;
+  final entry = _kboDraftDirectoryEntryFor(
+    club: club,
+    rawName: rawName,
+    number: number,
+  );
+  return entry?.position ?? '';
+}
+
 List<_PlayerSlot> _fallbackRecoveredBaseballPlayerPool() {
   final pool = <_PlayerSlot>[];
   for (final club in _kboDraftClubs) {
@@ -4078,24 +4447,19 @@ List<_PlayerSlot> _fallbackRecoveredBaseballPlayerPool() {
   return pool;
 }
 
-List<_PlayerSlot> _parseKboDraftPlayerPool(String raw) {
+List<_PlayerSlot> _parseKboDraftPlayerPoolFromDirectory(
+  List<_KboDraftDirectoryEntry> entries,
+) {
   final seen = <String>{};
   final pool = <_PlayerSlot>[];
 
-  for (final line in raw.split(RegExp(r'\r?\n'))) {
-    final parts = line.split('|').map((part) => part.trim()).toList();
-    if (parts.length < 5) continue;
-    final englishName = parts[0];
-    final koreanName = parts[1];
-    final club = _normalizeKboDraftClub(parts[2]);
-    final position = _normalizeKboDraftPosition(parts[3]);
-    final number = int.tryParse(parts[4]) ?? 0;
-    if (englishName.isEmpty || koreanName.isEmpty || position == null) {
+  for (final entry in entries) {
+    if (entry.koreanName.isEmpty) {
       continue;
     }
-
-    final displayName = koreanName;
-    final dedupeKey = '$club|$displayName|$position|$number';
+    final displayName = entry.koreanName;
+    final dedupeKey =
+        '${entry.club}|$displayName|${entry.position}|${entry.number}';
     if (!seen.add(dedupeKey)) continue;
 
     final scoreSeed = _stableSeedFromKey(dedupeKey);
@@ -4103,9 +4467,9 @@ List<_PlayerSlot> _parseKboDraftPlayerPool(String raw) {
       _PlayerSlot(
         name: displayName,
         score: 5 + (scoreSeed % 6),
-        position: position,
-        club: club,
-        number: number,
+        position: entry.position,
+        club: entry.club,
+        number: entry.number,
         playerId: dedupeKey,
       ),
     );
@@ -4120,10 +4484,9 @@ Future<List<_PlayerSlot>> _loadKboDraftPlayerPool() {
   final inFlight = _kboDraftPlayerPoolFuture;
   if (inFlight != null) return inFlight;
 
-  _kboDraftPlayerPoolFuture = rootBundle
-      .loadString(_kboDraftPlayerDirectoryAsset)
-      .then((raw) {
-        final parsed = _parseKboDraftPlayerPool(raw);
+  _kboDraftPlayerPoolFuture = _loadKboDraftPlayerDirectory()
+      .then((entries) {
+        final parsed = _parseKboDraftPlayerPoolFromDirectory(entries);
         final resolved = parsed.isNotEmpty
             ? parsed
             : _fallbackRecoveredBaseballPlayerPool();
@@ -4472,6 +4835,233 @@ String _fantasyRankText({required bool isSoccer}) {
   return '$rank / ${rows.length}팀';
 }
 
+Widget _buildLeagueItCoachMark({
+  required BuildContext context,
+  required GlobalKey showcaseKey,
+  required String title,
+  required String description,
+  required Widget child,
+  BorderRadius? targetBorderRadius,
+  EdgeInsets targetPadding = const EdgeInsets.all(6),
+  TooltipPosition? tooltipPosition,
+  bool enableAutoScroll = false,
+  double scrollAlignment = 0.5,
+  String badge = 'COACH MARK',
+  Widget? supplementalContent,
+}) {
+  return Showcase.withWidget(
+    key: showcaseKey,
+    targetPadding: targetPadding,
+    targetBorderRadius: targetBorderRadius,
+    tooltipPosition: tooltipPosition,
+    enableAutoScroll: enableAutoScroll,
+    scrollAlignment: scrollAlignment,
+    disableMovingAnimation: true,
+    overlayColor: const Color(0xFF04111F),
+    overlayOpacity: 0.84,
+    onBarrierClick: () => ShowcaseView.get().next(force: true),
+    container: _LeagueItCoachMarkCard(
+      badge: badge,
+      title: title,
+      description: description,
+      supplementalContent: supplementalContent,
+    ),
+    child: child,
+  );
+}
+
+class _LeagueItCoachMarkCard extends StatelessWidget {
+  final String badge;
+  final String title;
+  final String description;
+  final Widget? supplementalContent;
+
+  const _LeagueItCoachMarkCard({
+    required this.badge,
+    required this.title,
+    required this.description,
+    this.supplementalContent,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final width = min(MediaQuery.of(context).size.width * 0.88, 380.0);
+    const titleColor = Color(0xFF38BDF8);
+    const bodyColor = Color(0xFF7DD3FC);
+
+    return SafeArea(
+      minimum: const EdgeInsets.fromLTRB(10, 16, 10, 12),
+      child: SizedBox(
+        width: width,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: titleColor,
+                  fontSize: 23,
+                  height: 1.2,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                description,
+                style: const TextStyle(
+                  color: bodyColor,
+                  fontSize: 15,
+                  height: 1.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              if (supplementalContent != null) ...[
+                const SizedBox(height: 12),
+                supplementalContent!,
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CoachSwipeHint extends StatefulWidget {
+  const _CoachSwipeHint();
+
+  @override
+  State<_CoachSwipeHint> createState() => _CoachSwipeHintState();
+}
+
+class _CoachSwipeHintState extends State<_CoachSwipeHint>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1400),
+  )..repeat(reverse: true);
+
+  late final Animation<double> _slide = Tween<double>(
+    begin: -16,
+    end: 16,
+  ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const titleColor = Color(0xFF38BDF8);
+    const bodyColor = Color(0xFF7DD3FC);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 170,
+          height: 58,
+          child: AnimatedBuilder(
+            animation: _slide,
+            builder: (context, child) {
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  Positioned(
+                    left: 12,
+                    child: Transform.rotate(
+                      angle: -0.06,
+                      child: _SwipeHintMiniCard(
+                        label: 'K League',
+                        color: bodyColor.withValues(alpha: 0.22),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 12,
+                    child: Transform.rotate(
+                      angle: 0.06,
+                      child: _SwipeHintMiniCard(
+                        label: 'KBO',
+                        color: bodyColor.withValues(alpha: 0.16),
+                      ),
+                    ),
+                  ),
+                  Transform.translate(
+                    offset: Offset(_slide.value, 0),
+                    child: Container(
+                      width: 56,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: titleColor.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: titleColor.withValues(alpha: 0.55),
+                        ),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.swap_horiz_rounded,
+                        size: 22,
+                        color: titleColor,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          '좌우로 밀어 K리그와 KBO 매치업을 전환',
+          style: TextStyle(
+            color: bodyColor,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SwipeHintMiniCard extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _SwipeHintMiniCard({required this.label, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 62,
+      height: 42,
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: const Color(0xFF7DD3FC).withValues(alpha: 0.3),
+        ),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        label,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          color: Color(0xFFBAE6FD),
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+}
+
 class LeagueItHomePage extends StatefulWidget {
   const LeagueItHomePage({super.key});
 
@@ -4538,6 +5128,18 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     _backgroundLiveRefreshSuspended = suspended;
   }
 
+  void _refreshHomeLeagueSummaries({bool forceRefresh = false}) {
+    if (!mounted) return;
+    setState(() {
+      _leagueFuture = _loadCachedKLeagueLeagueData(
+        forceRefresh: forceRefresh,
+      );
+      _kboLeagueFuture = _loadCachedKboLeagueData(
+        forceRefresh: forceRefresh,
+      );
+    });
+  }
+
   static const String _kFrontLeagueKey = 'home.front_is_soccer';
   static const String _kSelectedHomeSoccerLeagueKey =
       'home.selected_soccer_league';
@@ -4545,6 +5147,19 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
       'home.selected_baseball_league';
   static const String _kJoinedDraftsKey = 'home.joined_drafts.v1';
   final GlobalKey _homeTitleKey = GlobalKey();
+  final GlobalKey _menuShowcaseKey = GlobalKey();
+  final GlobalKey _homeTitleShowcaseKey = GlobalKey();
+  final GlobalKey _homeCardShowcaseKey = GlobalKey();
+  final GlobalKey _standingsShowcaseKey = GlobalKey();
+  final GlobalKey _scheduleShowcaseKey = GlobalKey();
+  final GlobalKey _profileShowcaseKey = GlobalKey();
+  static const String _kAppOnboardingSeenKey = 'app.fullscreen_onboarding.v1';
+  static const String _kLoggedOutHomeOnboardingKey =
+      'home.onboarding.logged_out.v2';
+  static const String _kLoggedInHomeOnboardingKey =
+      'home.onboarding.logged_in.v2';
+  Timer? _homeOnboardingRetryTimer;
+  bool _isPresentingAppOnboarding = false;
   // Keep false in normal app flow. When true, login/league state is randomized
   // for UI demos and can look like "mock login".
   static const bool _demoRandomState = false;
@@ -4599,7 +5214,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
   _FantasyMatchupView? currentFantasyMatchupForSport(bool isSoccer) {
     final draft = fantasyDraftForSport(isSoccer);
     if (draft == null) return null;
-    return _currentFantasyMatchupForDraft(draft);
+    return _currentFantasyMatchupForDraft(draft, preferHomeDisplayRound: true);
   }
 
   List<_JoinedDraft> _homeDraftOptionsForSport(bool isSoccer) {
@@ -4665,11 +5280,16 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
       }
     }
     if (selectedDraft != null &&
-        _currentFantasyMatchupForDraft(selectedDraft) != null) {
+        _currentFantasyMatchupForDraft(
+              selectedDraft,
+              preferHomeDisplayRound: true,
+            ) !=
+            null) {
       return selectedDraft;
     }
     for (final draft in candidates) {
-      if (_currentFantasyMatchupForDraft(draft) != null) {
+      if (_currentFantasyMatchupForDraft(draft, preferHomeDisplayRound: true) !=
+          null) {
         return draft;
       }
     }
@@ -4708,14 +5328,17 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     bool forceRefresh = false,
   }) async {
     final now = DateTime.now();
-    final round = _currentFantasyRoundAt(draft, now);
+    final round = _homeDisplayedFantasyRoundAt(draft, now);
     final absoluteRound = _mappedKboRoundForFantasyRound(draft, round);
     if (!_kboFantasyRoundHasStarted(draft, round, now)) return;
     if (_shouldFreezeUnlockedKboRoundScore(draft, round, now: now)) {
       await _ensureUnlockedKboMatchupScoreSnapshotsForDraft(draft);
       return;
     }
-    final matchup = _currentFantasyMatchupForDraft(draft);
+    final matchup = _currentFantasyMatchupForDraft(
+      draft,
+      preferHomeDisplayRound: true,
+    );
     if (matchup == null) return;
 
     final slots = <String, _PlayerSlot>{};
@@ -5968,6 +6591,8 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
       }),
     );
     unawaited(_restorePersistedKLeaguePlayerAptsCache());
+    unawaited(_restorePersistedKboPlayerAptsCache());
+    unawaited(_restorePersistedKboVisibleTeamScoresCache());
     unawaited(
       _restorePersistedKLeaguePlayerRoundPointsCache().then((_) {
         if (!mounted) return;
@@ -5978,10 +6603,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     _kboLiveRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (!mounted) return;
       if (_backgroundLiveRefreshSuspended) return;
-      setState(() {
-        _leagueFuture = _loadCachedKLeagueLeagueData(forceRefresh: true);
-        _kboLeagueFuture = _loadCachedKboLeagueData(forceRefresh: true);
-      });
+      _refreshHomeLeagueSummaries(forceRefresh: true);
       unawaited(_refreshFantasySoccerScores(forceRefreshLiveData: true));
       unawaited(_refreshVisibleHomeKboRoundPoints(forceRefresh: true));
     });
@@ -6034,6 +6656,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
       _launchController.forward().whenComplete(() {
         if (!mounted) return;
         setState(() => _showLaunchIntro = false);
+        _scheduleAppOnboardingCheck();
       });
     } else {
       _launchController.value = 1;
@@ -6043,6 +6666,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     _startDraftTimer();
     unawaited(_restoreLocalState());
     unawaited(_initLeagueLinkHandling());
+    _scheduleAppOnboardingCheck();
 
     assert(() {
       // Only apply demo-random state when no persisted session exists.
@@ -6065,6 +6689,12 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     if (!mounted) return;
     final v = authController.isLoggedIn;
     final currentAuthUid = _activeProfileAvatarUid();
+    try {
+      final showcase = ShowcaseView.get();
+      if (showcase.isShowcaseRunning) {
+        showcase.dismiss();
+      }
+    } catch (_) {}
     if (_lastAvatarCacheAuthUid != currentAuthUid) {
       _clearPublicProfileAvatarUrlCache();
       _clearPublicProfileDisplayNameCache();
@@ -6082,6 +6712,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
       return;
     }
     setState(() => _isLoggedIn = v);
+    _scheduleHomeOnboardingCheck();
     if (v) {
       unawaited(_ensureProfileAvatarPathLoaded());
       unawaited(_restoreLocalState());
@@ -6192,6 +6823,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     _launchController.dispose();
     _draftTimer?.cancel();
     _kboLiveRefreshTimer?.cancel();
+    _homeOnboardingRetryTimer?.cancel();
     _incomingLeagueLinkSub?.cancel();
     _joinedDraftsSub?.cancel();
     super.dispose();
@@ -6200,6 +6832,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
   @override
   void didPopNext() {
     _resetSearchUi();
+    _refreshHomeLeagueSummaries(forceRefresh: true);
   }
 
   void _toggleMenu() {
@@ -6216,17 +6849,18 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
   }
 
   List<_HomeSearchSuggestion> _buildSoccerSearchDirectory() {
-    final entries =
-        _docMetaByName.entries
-            .map(
-              (entry) => _HomeSearchSuggestion(
-                name: entry.key,
-                isSoccer: true,
-                meta: entry.value,
-              ),
-            )
-            .toList()
-          ..sort((a, b) => a.name.compareTo(b.name));
+    final entries = _docMetaByName.entries.map((entry) {
+      final meta = _resolvePlayerMeta(entry.key, asOf: DateTime.now());
+      return _HomeSearchSuggestion(
+        name: entry.key,
+        isSoccer: true,
+        meta: _DocPlayerMeta(
+          position: meta.position,
+          club: meta.club,
+          number: meta.number,
+        ),
+      );
+    }).toList()..sort((a, b) => a.name.compareTo(b.name));
     return entries;
   }
 
@@ -6463,6 +7097,199 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
     _setSelectedHomeLeagueIdForSport(_frontLeagueIsSoccer, selected);
   }
 
+  String _homeOnboardingStorageKeyForCurrentState() {
+    return _isLoggedIn
+        ? _kLoggedInHomeOnboardingKey
+        : _kLoggedOutHomeOnboardingKey;
+  }
+
+  List<GlobalKey> _homeOnboardingKeysForCurrentState() {
+    final keys = <GlobalKey>[_menuShowcaseKey];
+    if (_isLoggedIn) {
+      keys.add(_homeTitleShowcaseKey);
+    }
+    keys.addAll([
+      _homeCardShowcaseKey,
+      _standingsShowcaseKey,
+      _scheduleShowcaseKey,
+      _profileShowcaseKey,
+    ]);
+    return keys;
+  }
+
+  void _scheduleHomeOnboardingCheck({bool force = false}) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_maybeStartHomeOnboarding(force: force));
+    });
+  }
+
+  void _scheduleAppOnboardingCheck({
+    bool force = false,
+    bool runCoachMarksAfter = true,
+  }) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(
+        _maybePresentAppOnboarding(
+          force: force,
+          runCoachMarksAfter: runCoachMarksAfter,
+        ),
+      );
+    });
+  }
+
+  Future<void> _maybePresentAppOnboarding({
+    bool force = false,
+    bool runCoachMarksAfter = true,
+  }) async {
+    if (!mounted || _showLaunchIntro || _isPresentingAppOnboarding) return;
+
+    if (!force) {
+      final seen = await _readLocalStateCache(_kAppOnboardingSeenKey);
+      if (seen == '1') {
+        if (runCoachMarksAfter) {
+          _scheduleHomeOnboardingCheck();
+        }
+        return;
+      }
+    }
+    if (!mounted) return;
+
+    _isPresentingAppOnboarding = true;
+    bool completed = false;
+    try {
+      completed =
+          await Navigator.of(context).push<bool>(
+            MaterialPageRoute(builder: (_) => const AppOnboardingPage()),
+          ) ??
+          false;
+      if (completed) {
+        await _writeLocalStateCache(_kAppOnboardingSeenKey, '1');
+      }
+    } catch (error, stackTrace) {
+      debugPrint('App onboarding presentation failed: $error');
+      debugPrint('$stackTrace');
+    } finally {
+      _isPresentingAppOnboarding = false;
+    }
+
+    if (!mounted) return;
+    if (runCoachMarksAfter) {
+      _scheduleHomeOnboardingCheck();
+    }
+  }
+
+  void _retryHomeOnboarding({bool force = false}) {
+    _homeOnboardingRetryTimer?.cancel();
+    _homeOnboardingRetryTimer = Timer(const Duration(milliseconds: 320), () {
+      if (!mounted) return;
+      unawaited(_maybeStartHomeOnboarding(force: force));
+    });
+  }
+
+  Future<void> _maybeStartHomeOnboarding({bool force = false}) async {
+    if (!mounted) return;
+    if (_isPresentingAppOnboarding ||
+        _showLaunchIntro ||
+        _isMenuOpen ||
+        _isMyPageOpen ||
+        _suggestionsVisible) {
+      _retryHomeOnboarding(force: force);
+      return;
+    }
+
+    final storageKey = _homeOnboardingStorageKeyForCurrentState();
+    if (!force) {
+      final seen = await _localStateStorage.read(key: storageKey);
+      if (seen == '1') return;
+    }
+    if (!mounted) return;
+
+    try {
+      final showcase = ShowcaseView.get();
+      final showcaseKeys = _homeOnboardingKeysForCurrentState();
+      final allTargetsReady = showcaseKeys.every(showcase.isTargetRendered);
+      if (!allTargetsReady) {
+        _retryHomeOnboarding(force: force);
+        return;
+      }
+      if (showcase.isShowcaseRunning) return;
+      await _safeWriteLocalState(key: storageKey, value: '1');
+      if (!mounted) return;
+      showcase.startShowCase(
+        showcaseKeys,
+        delay: const Duration(milliseconds: 280),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Home onboarding start failed: $error');
+      debugPrint('$stackTrace');
+      _retryHomeOnboarding(force: force);
+    }
+  }
+
+  void replayHomeOnboarding() {
+    if (!mounted) return;
+    _homeOnboardingRetryTimer?.cancel();
+    _resetSearchUi();
+    try {
+      final showcase = ShowcaseView.get();
+      if (showcase.isShowcaseRunning) {
+        showcase.dismiss();
+      }
+    } catch (_) {}
+    setState(() {
+      _isMenuOpen = false;
+      _isMyPageOpen = false;
+    });
+    _scheduleHomeOnboardingCheck(force: true);
+  }
+
+  void replayHomeCoachMarks() {
+    replayHomeOnboarding();
+  }
+
+  void replayAppOnboarding() {
+    if (!mounted) return;
+    _homeOnboardingRetryTimer?.cancel();
+    _resetSearchUi();
+    try {
+      final showcase = ShowcaseView.get();
+      if (showcase.isShowcaseRunning) {
+        showcase.dismiss();
+      }
+    } catch (_) {}
+    closePanels();
+    _scheduleAppOnboardingCheck(force: true, runCoachMarksAfter: false);
+  }
+
+  Widget _buildHomeShowcase({
+    required GlobalKey showcaseKey,
+    required String title,
+    required String description,
+    required Widget child,
+    BorderRadius? targetBorderRadius,
+    EdgeInsets targetPadding = const EdgeInsets.all(6),
+    TooltipPosition? tooltipPosition,
+    bool enableAutoScroll = false,
+    double scrollAlignment = 0.5,
+    Widget? supplementalContent,
+  }) {
+    return _buildLeagueItCoachMark(
+      context: context,
+      showcaseKey: showcaseKey,
+      title: title,
+      description: description,
+      targetBorderRadius: targetBorderRadius,
+      targetPadding: targetPadding,
+      tooltipPosition: tooltipPosition,
+      enableAutoScroll: enableAutoScroll,
+      scrollAlignment: scrollAlignment,
+      supplementalContent: supplementalContent,
+      child: child,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -6481,10 +7308,31 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
             preferredSize: const Size.fromHeight(60),
             child: _CustomAppBar(
               onMenuPressed: _toggleMenu,
+              onHelpPressed: replayHomeCoachMarks,
               onMyPagePressed: _toggleMyPage,
               searchController: _searchController,
               onSearch: _handleSearch,
               onChanged: _updateSuggestions,
+              showSearch: false,
+              wrapMenuButton: (context, child) => _buildHomeShowcase(
+                showcaseKey: _menuShowcaseKey,
+                title: '메뉴',
+                description:
+                    '이용방법, 자주 묻는 질문, 개인정보 처리방침 같은 주요 메뉴를 확인할 수 있습니다.',
+                targetBorderRadius: BorderRadius.circular(16),
+                tooltipPosition: TooltipPosition.bottom,
+                child: child,
+              ),
+              wrapMyPageButton: (context, child) => _buildHomeShowcase(
+                showcaseKey: _profileShowcaseKey,
+                title: _isLoggedIn ? '마이페이지' : '로그인',
+                description: _isLoggedIn
+                    ? '프로필, 내 리그, 비밀번호, 설정을 확인 할 수 있습니다.'
+                    : '로그인하거나 계정을 만들면 리그 상태와 개인 기록이 저장됩니다.',
+                targetBorderRadius: BorderRadius.circular(999),
+                tooltipPosition: TooltipPosition.bottom,
+                child: child,
+              ),
             ),
           ),
           body: Stack(
@@ -6496,69 +7344,109 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                 ),
                 child: LayoutBuilder(
                   builder: (context, constraints) {
+                    final mediaSize = MediaQuery.sizeOf(context);
+                    final bool isTabletLayout = mediaSize.shortestSide >= 700;
+                    final double homeTitleFontSize = isTabletLayout ? 56 : 45;
+                    final double homeTitleIconSize = isTabletLayout ? 24 : 20;
+                    final double heroSectionHeight = isTabletLayout
+                        ? (_isLoggedIn && _draftTime != null ? 700 : 620)
+                              .toDouble()
+                        : constraints.maxHeight;
+                    final double homeWidgetsLift = isTabletLayout ? -72 : -160;
+                    final Widget homeCardSwitcher = CardSwitcher(
+                      isLoggedIn: _isLoggedIn,
+                      hasSoccerLeague: _hasSoccerLeague,
+                      hasBaseballLeague: _hasBaseballLeague,
+                      frontLeagueIsSoccer: _frontLeagueIsSoccer,
+                      onFrontLeagueChanged: (isSoccer) {
+                        if (_frontLeagueIsSoccer == isSoccer) {
+                          return;
+                        }
+                        setState(() => _frontLeagueIsSoccer = isSoccer);
+                        unawaited(_saveLocalState());
+                      },
+                    );
+                    final Widget coachedHomeCardSwitcher = _buildHomeShowcase(
+                      showcaseKey: _homeCardShowcaseKey,
+                      title: _isLoggedIn ? '이번 주 매치업' : '리그 만들기',
+                      description: _isLoggedIn
+                          ? '카드를 탭하면 매치업 디테일 화면으로 이동합니다. 좌우로 스와이프해서 K리그와 KBO 매치업 카드를 바꿀 수 있습니다.'
+                          : 'Start를 눌러 원하는 종목의 판타지 리그를 바로 생성할 수 있습니다.',
+                      targetBorderRadius: BorderRadius.circular(24),
+                      targetPadding: const EdgeInsets.fromLTRB(10, 26, 12, 10),
+                      tooltipPosition: TooltipPosition.bottom,
+                      supplementalContent: _isLoggedIn
+                          ? const _CoachSwipeHint()
+                          : null,
+                      child: homeCardSwitcher,
+                    );
+
                     return SingleChildScrollView(
                       physics: const BouncingScrollPhysics(),
                       child: Column(
                         children: [
                           SizedBox(
-                            height: constraints.maxHeight,
+                            height: heroSectionHeight,
                             child: Stack(
                               children: [
-                                Column(
-                                  children: [
-                                    const SizedBox(height: topGap),
-                                    Expanded(
-                                      child: Center(
-                                        child: CardSwitcher(
-                                          isLoggedIn: _isLoggedIn,
-                                          hasSoccerLeague: _hasSoccerLeague,
-                                          hasBaseballLeague: _hasBaseballLeague,
-                                          frontLeagueIsSoccer:
-                                              _frontLeagueIsSoccer,
-                                          onFrontLeagueChanged: (isSoccer) {
-                                            if (_frontLeagueIsSoccer ==
-                                                isSoccer) {
-                                              return;
-                                            }
-                                            setState(
-                                              () => _frontLeagueIsSoccer =
-                                                  isSoccer,
-                                            );
-                                            unawaited(_saveLocalState());
-                                          },
+                                if (isTabletLayout)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 228),
+                                    child: Align(
+                                      alignment: Alignment.topCenter,
+                                      child: coachedHomeCardSwitcher,
+                                    ),
+                                  )
+                                else
+                                  Column(
+                                    children: [
+                                      const SizedBox(height: topGap),
+                                      Expanded(
+                                        child: Center(
+                                          child: coachedHomeCardSwitcher,
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                  ],
-                                ),
+                                      const SizedBox(height: 16),
+                                    ],
+                                  ),
                                 Positioned(
-                                  top: 92,
+                                  top: isTabletLayout ? 96 : 92,
                                   left: 0,
                                   right: 0,
                                   child: FadeTransition(
                                     opacity: _fadeAnimation,
                                     child: Center(
-                                      child: InkWell(
-                                        key: _homeTitleKey,
-                                        borderRadius: BorderRadius.circular(16),
-                                        onTap: _showHomeLeagueDropdown,
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: const [
-                                            Text(
-                                              'LeagueIt',
-                                              style: TextStyle(
-                                                fontSize: 45,
-                                                fontWeight: FontWeight.bold,
+                                      child: _buildHomeShowcase(
+                                        showcaseKey: _homeTitleShowcaseKey,
+                                        title: '리그 전환',
+                                        description:
+                                            'LeagueIt을 탭하면 같은 종목의 다른 리그로 전환 할 수 있습니다.',
+                                        targetBorderRadius:
+                                            BorderRadius.circular(18),
+                                        tooltipPosition: TooltipPosition.bottom,
+                                        child: InkWell(
+                                          key: _homeTitleKey,
+                                          borderRadius: BorderRadius.circular(
+                                            16,
+                                          ),
+                                          onTap: _showHomeLeagueDropdown,
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Text(
+                                                'LeagueIt',
+                                                style: TextStyle(
+                                                  fontSize: homeTitleFontSize,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
                                               ),
-                                            ),
-                                            SizedBox(width: 6),
-                                            Icon(
-                                              Icons.arrow_drop_down,
-                                              size: 20,
-                                            ),
-                                          ],
+                                              const SizedBox(width: 6),
+                                              Icon(
+                                                Icons.arrow_drop_down,
+                                                size: homeTitleIconSize,
+                                              ),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -6607,7 +7495,7 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                           const SizedBox(height: 12),
                           // Only lift the standings card to reduce the gap to the main card area.
                           Transform.translate(
-                            offset: const Offset(0, -160),
+                            offset: Offset(0, homeWidgetsLift),
                             child: Column(
                               children: [
                                 GestureDetector(
@@ -6631,6 +7519,18 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                                     leagueFuture: _frontLeagueIsSoccer
                                         ? _leagueFuture
                                         : _kboLeagueFuture,
+                                    headerCoachmarkBuilder: (child) =>
+                                        _buildHomeShowcase(
+                                          showcaseKey: _standingsShowcaseKey,
+                                          title: '순위표',
+                                          description:
+                                              '현재 선택한 리그의 순위를 빠르게 확인합니다. 탭하면 전체 순위 화면으로 이동합니다.',
+                                          targetBorderRadius:
+                                              BorderRadius.circular(18),
+                                          enableAutoScroll: true,
+                                          scrollAlignment: 0.82,
+                                          child: child,
+                                        ),
                                   ),
                                 ),
                                 const SizedBox(height: 20),
@@ -6655,6 +7555,18 @@ class LeagueItHomePageState extends State<LeagueItHomePage>
                                     leagueFuture: _frontLeagueIsSoccer
                                         ? _leagueFuture
                                         : _kboLeagueFuture,
+                                    headerCoachmarkBuilder: (child) =>
+                                        _buildHomeShowcase(
+                                          showcaseKey: _scheduleShowcaseKey,
+                                          title: '일정',
+                                          description:
+                                              '이번 주 경기 일정을 요약해서 보여줍니다. 탭하면 전체 일정 화면으로 이동합니다.',
+                                          targetBorderRadius:
+                                              BorderRadius.circular(18),
+                                          enableAutoScroll: true,
+                                          scrollAlignment: 0.78,
+                                          child: child,
+                                        ),
                                   ),
                                 ),
                               ],

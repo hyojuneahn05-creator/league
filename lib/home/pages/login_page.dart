@@ -155,6 +155,18 @@ class _LoginPageState extends State<LoginPage> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  Future<void> _openPasswordReset() async {
+    final sent = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            PasswordResetPage(initialEmail: _emailController.text.trim()),
+      ),
+    );
+    if (!mounted || sent != true) return;
+    _showSnack('가입된 이메일이면 비밀번호 재설정 메일을 보냈습니다.');
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = _leagueItSurfacePalette(context);
@@ -262,6 +274,28 @@ class _LoginPageState extends State<LoginPage> {
                         }
                       },
                       fillColor: palette.fieldFill,
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: _submitting ? null : _openPasswordReset,
+                        style: TextButton.styleFrom(
+                          foregroundColor: palette.accent,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 0,
+                          ),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        child: const Text(
+                          '비밀번호를 잊으셨나요?',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 24),
                     SizedBox(
@@ -376,11 +410,7 @@ class _LoginPageState extends State<LoginPage> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              CupertinoIcons.apple_logo,
-                              size: 20,
-                              color: Colors.white,
-                            ),
+                            Icon(Icons.apple, size: 20, color: Colors.white),
                             const SizedBox(width: 12),
                             Text(
                               'Apple로 로그인',
@@ -426,6 +456,254 @@ class _LoginPageState extends State<LoginPage> {
               Center(
                 child: Text(
                   '계정이 없으면 회원가입을 진행하세요.',
+                  style: TextStyle(
+                    color: palette.mutedInk,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class PasswordResetPage extends StatefulWidget {
+  final String initialEmail;
+
+  const PasswordResetPage({super.key, this.initialEmail = ''});
+
+  @override
+  State<PasswordResetPage> createState() => _PasswordResetPageState();
+}
+
+class _PasswordResetPageState extends State<PasswordResetPage> {
+  static final RegExp _emailPattern = RegExp(
+    r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$",
+  );
+
+  late final TextEditingController _emailController;
+  bool _submitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController(text: widget.initialEmail);
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String? _emailValidationMessage(String value) {
+    final email = value.trim();
+    if (email.isEmpty) {
+      return '이메일을 입력해 주세요.';
+    }
+    if (!_emailPattern.hasMatch(email)) {
+      return '올바른 이메일 형식이 아닙니다.';
+    }
+    return null;
+  }
+
+  Future<void> _sendResetEmail() async {
+    if (_submitting) return;
+    final email = _emailController.text.trim();
+    final validationMessage = _emailValidationMessage(email);
+    if (validationMessage != null) {
+      _showSnack(validationMessage);
+      return;
+    }
+
+    setState(() => _submitting = true);
+    try {
+      await authController.sendPasswordResetEmail(email: email);
+      if (!mounted) return;
+      Navigator.pop(context, true);
+    } on FirebaseAuthException catch (error) {
+      if (!mounted) return;
+      switch (error.code) {
+        case 'invalid-email':
+          _showSnack('올바른 이메일 형식이 아닙니다.');
+          break;
+        case 'too-many-requests':
+          _showSnack('요청이 많아 잠시 차단되었습니다. 잠시 후 다시 시도해 주세요.');
+          break;
+        case 'user-not-found':
+          Navigator.pop(context, true);
+          break;
+        default:
+          _showSnack(error.message ?? '비밀번호 재설정 메일 전송에 실패했습니다.');
+          break;
+      }
+    } catch (_) {
+      if (!mounted) return;
+      _showSnack('비밀번호 재설정 메일 전송 중 오류가 발생했습니다.');
+    } finally {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = _leagueItSurfacePalette(context);
+
+    return Scaffold(
+      backgroundColor: palette.pageBackground,
+      appBar: AppBar(
+        backgroundColor: palette.pageBackground,
+        elevation: 0,
+        surfaceTintColor: Colors.transparent,
+        title: Text(
+          '비밀번호 재설정',
+          style: TextStyle(
+            fontSize: 21,
+            fontWeight: FontWeight.w700,
+            color: palette.ink,
+          ),
+        ),
+      ),
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(24, 24, 24, 28),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(32),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [palette.gradientTop, palette.gradientBottom],
+                  ),
+                  border: Border.all(color: palette.cardBorder),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(
+                        alpha: palette.isDark ? 0.28 : 0.07,
+                      ),
+                      blurRadius: 28,
+                      offset: const Offset(0, 16),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: palette.accentSoft,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        'RESET PASSWORD',
+                        style: TextStyle(
+                          color: palette.accent,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      '재설정 메일 보내기',
+                      style: TextStyle(
+                        fontSize: 28,
+                        height: 1.2,
+                        fontWeight: FontWeight.w800,
+                        color: palette.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      '가입한 이메일 주소를 입력하면 비밀번호를 다시 설정할 수 있는 링크를 보내드립니다.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.45,
+                        fontWeight: FontWeight.w600,
+                        color: palette.mutedInk,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    _SignUpInputField(
+                      controller: _emailController,
+                      label: '이메일',
+                      hintText: 'name@example.com',
+                      keyboardType: TextInputType.emailAddress,
+                      prefixIcon: Icons.alternate_email_rounded,
+                      textInputAction: TextInputAction.done,
+                      fillColor: palette.fieldFill,
+                      enabled: !_submitting,
+                      onSubmitted: (_) {
+                        if (!_submitting) {
+                          unawaited(_sendResetEmail());
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 56,
+                      child: ElevatedButton(
+                        onPressed: _submitting ? null : _sendResetEmail,
+                        style: ElevatedButton.styleFrom(
+                          elevation: 0,
+                          backgroundColor: palette.accent,
+                          disabledBackgroundColor: palette.buttonDisabled,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                        ),
+                        child: _submitting
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.4,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : const Text(
+                                '재설정 메일 보내기',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 18),
+              Center(
+                child: Text(
+                  '메일이 보이지 않으면 스팸함도 확인해 주세요.',
                   style: TextStyle(
                     color: palette.mutedInk,
                     fontSize: 13,

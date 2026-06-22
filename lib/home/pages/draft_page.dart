@@ -172,6 +172,13 @@ class DraftPage extends StatefulWidget {
 class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
   static const Duration pickTime = _draftPickDuration;
   static const Duration mockAiPickDelay = Duration(milliseconds: 450);
+  static const Color _draftAccent = Color(0xFF2F8F5B);
+  static const Color _draftAccentSoft = Color(0xFFEAF6EE);
+  static const Color _draftAccentBorder = Color(0xFFD6E6DA);
+  static const Color _draftInk = Color(0xFF202124);
+  static const Color _draftMuted = Color(0xFF6B6C66);
+  static const Color _draftSurface = Colors.white;
+  static const Color _draftSubtle = Color(0xFFF7F8F6);
 
   late final _DraftRules _rules;
   late final List<String> _teamNames;
@@ -181,6 +188,7 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
   late final AnimationController _blinkController;
   late final ValueNotifier<String> _timeLabel;
   late final String _sessionKey;
+  late final int? _mockUserTeamIndex;
   List<_PlayerSlot> _playerPool = const [];
 
   int _currentIndex = 0;
@@ -208,9 +216,14 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
     final provided = widget.teamNames;
     if (provided != null && provided.length == widget.teamCount) {
       _teamNames = List<String>.from(provided);
+      _mockUserTeamIndex = _resolveMockUserTeamIndex(_teamNames);
+    } else if (widget.isMock) {
+      _mockUserTeamIndex = _fallbackMockUserTeamIndex();
+      _teamNames = _buildMockTeamNames();
     } else {
       _teamNames = List.generate(widget.teamCount, (i) => 'Team ${i + 1}')
         ..shuffle(_rand);
+      _mockUserTeamIndex = null;
     }
 
     _board = List.generate(
@@ -549,8 +562,8 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
     unawaited(_maybeFinalizeFantasyLeague());
     if (showSnackBar) {
       final message = !widget.isMock && hadBlankSlots
-          ? 'Draft 완료! 빈칸은 포지션 최소 조건에 맞춰 자동 보정되었습니다.'
-          : 'Draft 완료!';
+          ? '드래프트 완료! 빈칸은 포지션 최소 조건에 맞춰 자동 보정되었습니다.'
+          : '드래프트 완료!';
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
@@ -560,12 +573,102 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
   (int row, int col) _idxToPos(int idx) =>
       (idx ~/ widget.teamCount, idx % widget.teamCount);
 
+  String? _mockUserTeamName() {
+    final mine = widget.myTeamName?.trim();
+    if (mine != null && mine.isNotEmpty) return mine;
+
+    final user = FirebaseAuth.instance.currentUser;
+    final displayName = user?.displayName?.trim() ?? '';
+    if (displayName.isNotEmpty) return displayName;
+
+    final emailPrefix = (user?.email ?? '').split('@').first.trim();
+    if (emailPrefix.isNotEmpty) return emailPrefix;
+    return null;
+  }
+
+  int _fallbackMockUserTeamIndex() {
+    if (widget.teamCount <= 0) return 0;
+    final userKey =
+        FirebaseAuth.instance.currentUser?.uid.trim().isNotEmpty == true
+        ? FirebaseAuth.instance.currentUser!.uid.trim()
+        : (_mockUserTeamName() ?? 'me');
+    final seed = _stableSeedFromKey('mock-user|$userKey|$_sessionKey');
+    return seed.abs() % widget.teamCount;
+  }
+
+  int? _resolveMockUserTeamIndex(List<String> teamNames) {
+    if (!widget.isMock || teamNames.isEmpty) return null;
+
+    final mine = _mockUserTeamName()?.toLowerCase();
+    if (mine != null && mine.isNotEmpty) {
+      final directIndex = teamNames.indexWhere(
+        (teamName) => teamName.trim().toLowerCase() == mine,
+      );
+      if (directIndex >= 0) return directIndex;
+    }
+
+    final currentUserUid = FirebaseAuth.instance.currentUser?.uid.trim() ?? '';
+    if (currentUserUid.isNotEmpty) {
+      final entryIndex = widget.draftOrderEntries.indexWhere(
+        (entry) => entry.uid.trim() == currentUserUid,
+      );
+      if (entryIndex >= 0 && entryIndex < teamNames.length) {
+        return entryIndex;
+      }
+    }
+
+    return null;
+  }
+
+  List<String> _buildMockTeamNames() {
+    final names = List<String>.generate(
+      widget.teamCount,
+      (index) => 'AI Team ${index + 1}',
+    );
+    final userTeamName = _mockUserTeamName();
+    final userTeamIndex = _mockUserTeamIndex;
+    if (userTeamIndex != null &&
+        userTeamIndex >= 0 &&
+        userTeamIndex < names.length &&
+        userTeamName != null &&
+        userTeamName.isNotEmpty) {
+      names[userTeamIndex] = userTeamName;
+    }
+    return names;
+  }
+
   bool get _isMockUserTurn {
     if (!widget.isMock) return true;
-    final mine = widget.myTeamName?.trim();
-    if (mine == null || mine.isEmpty) return true;
+    if (_mockUserTeamIndex == null) return true;
     final (_, col) = _idxToPos(_order[_currentIndex]);
-    return _teamNames[col].trim().toLowerCase() == mine.toLowerCase();
+    return col == _mockUserTeamIndex;
+  }
+
+  bool get _isActualUserTurn {
+    if (widget.isMock) return true;
+    if (_draftComplete || _currentIndex >= _order.length) return false;
+
+    final (_, col) = _idxToPos(_order[_currentIndex]);
+    final currentUserUid = FirebaseAuth.instance.currentUser?.uid.trim() ?? '';
+    if (col < widget.draftOrderEntries.length) {
+      final entryUid = widget.draftOrderEntries[col].uid.trim();
+      if (currentUserUid.isNotEmpty && entryUid.isNotEmpty) {
+        return currentUserUid == entryUid;
+      }
+    }
+
+    final mine = widget.myTeamName?.trim();
+    if (mine != null && mine.isNotEmpty) {
+      return _teamNames[col].trim().toLowerCase() == mine.toLowerCase();
+    }
+    return false;
+  }
+
+  bool _canCurrentUserPickCell(int row, int col) {
+    if (_isBeforeActualStart || _draftComplete || !_isCurrentCell(row, col)) {
+      return false;
+    }
+    return widget.isMock ? _isMockUserTurn : _isActualUserTurn;
   }
 
   void _handleTurnChange() {
@@ -609,8 +712,12 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
     return r == row && c == col;
   }
 
-  bool _isPicked(_PlayerSlot p) =>
-      _board.any((round) => round.any((sel) => sel?.name == p.name));
+  bool _isPicked(_PlayerSlot p) => _board.any(
+    (round) => round.any(
+      (sel) =>
+          sel != null && _playerSlotIdentity(sel) == _playerSlotIdentity(p),
+    ),
+  );
 
   bool get _hasBlankSlots =>
       _board.any((round) => round.any((slot) => slot == null));
@@ -701,6 +808,27 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
     return _draftBoardToFirestoreRows(_board);
   }
 
+  List<List<_PlayerSlot?>> _copyBoardForFantasyState() {
+    return _board
+        .map(
+          (row) => row
+              .map(
+                (slot) => slot == null
+                    ? null
+                    : _PlayerSlot(
+                        name: slot.name,
+                        score: slot.score,
+                        position: slot.position,
+                        club: slot.club,
+                        number: slot.number,
+                        playerId: slot.playerId,
+                      ),
+              )
+              .toList(),
+        )
+        .toList();
+  }
+
   List<_FantasyTeamPlayer> _draftedRosterForTeam(int teamIdx) {
     final roster = <_FantasyTeamPlayer>[];
     for (int row = 0; row < _board.length; row++) {
@@ -711,6 +839,9 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
           name: slot.name,
           position: slot.position,
           score: slot.score,
+          club: slot.club,
+          number: slot.number,
+          playerId: slot.playerId,
         ),
       );
     }
@@ -758,20 +889,12 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
   List<_FantasyTeamPlayer> _buildBaseballStarting(
     List<_FantasyTeamPlayer> roster,
   ) {
-    final catchers = roster.where((p) => p.position == 'C').toList()
-      ..sort((a, b) => b.score.compareTo(a.score));
-    final pitchers = roster.where((p) => p.position == 'P').toList()
-      ..sort((a, b) => b.score.compareTo(a.score));
-    final infielders = roster.where((p) => p.position == 'IF').toList()
-      ..sort((a, b) => b.score.compareTo(a.score));
-    final outfielders = roster.where((p) => p.position == 'OF').toList()
-      ..sort((a, b) => b.score.compareTo(a.score));
-    return [
-      ...catchers.take(1),
-      ...pitchers.take(1),
-      ...infielders.take(4),
-      ...outfielders.take(3),
-    ];
+    return _buildBaseballStartingFromRoster(
+      roster,
+      positionOf: (player) => player.position,
+      scoreOf: (player) => player.score,
+      identityOf: (player) => _fantasyTeamPlayerIdentity(player),
+    );
   }
 
   List<_FantasyTeamState> _buildFantasyTeams() {
@@ -781,9 +904,12 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
       final starting = widget.isSoccer
           ? _buildSoccerStarting(roster)
           : _buildBaseballStarting(roster);
-      final startingNames = starting.map((player) => player.name).toSet();
+      final startingIds = starting.map(_fantasyTeamPlayerIdentity).toSet();
       final bench = roster
-          .where((player) => !startingNames.contains(player.name))
+          .where(
+            (player) =>
+                !startingIds.contains(_fantasyTeamPlayerIdentity(player)),
+          )
           .toList();
       final entry = teamIdx < widget.draftOrderEntries.length
           ? widget.draftOrderEntries[teamIdx]
@@ -875,14 +1001,44 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
     if (_finalizingFantasy || widget.isMock || widget.leagueId.isEmpty) return;
     _finalizingFantasy = true;
     try {
+      final fantasyTeams = _buildFantasyTeams();
+      final fantasySchedule = _buildFantasySchedule();
+      final draftBoard = _serializeDraftBoard();
       await LeagueService.instance.finalizeFantasyLeague(
         leagueId: widget.leagueId,
-        draftBoard: _serializeDraftBoard(),
-        fantasyTeams: _buildFantasyTeams().map((team) => team.toMap()).toList(),
-        fantasySchedule: _buildFantasySchedule()
+        draftBoard: draftBoard,
+        fantasyTeams: fantasyTeams.map((team) => team.toMap()).toList(),
+        fantasySchedule: fantasySchedule
             .map((matchup) => matchup.toMap())
             .toList(),
       );
+      final homeState = homeKey.currentState;
+      if (homeState != null) {
+        final existing = homeState.joinedDrafts
+            .cast<_JoinedDraft?>()
+            .firstWhere(
+              (draft) => draft?.leagueId == widget.leagueId,
+              orElse: () => null,
+            );
+        homeState.addOrUpdateJoinedDraft(
+          _JoinedDraft(
+            leagueId: widget.leagueId,
+            leagueName: widget.leagueName,
+            when: widget.draftTime,
+            isSoccer: widget.isSoccer,
+            teamCount: existing?.teamCount ?? widget.teamCount,
+            roundCount: existing?.roundCount ?? widget.roundCount,
+            memberCount: existing?.memberCount ?? widget.teamCount,
+            inviteCode: existing?.inviteCode ?? '',
+            ownerId: existing?.ownerId ?? '',
+            draftOrder: existing?.draftOrder ?? widget.draftOrderEntries,
+            fantasyReady: true,
+            fantasyTeams: fantasyTeams,
+            fantasySchedule: fantasySchedule,
+            draftBoard: _copyBoardForFantasyState(),
+          ),
+        );
+      }
     } catch (e) {
       debugPrint('finalizeFantasyLeague failed: $e');
     } finally {
@@ -891,23 +1047,40 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
   }
 
   Future<void> _onCellTap(int row, int col) async {
-    if (_isBeforeActualStart ||
-        _draftComplete ||
-        !_isCurrentCell(row, col) ||
-        !_isMockUserTurn) {
+    if (!_canCurrentUserPickCell(row, col)) {
       return;
+    }
+    final selectable = _selectablePlayersForTeam(col);
+    final selectableIds = selectable.map(_playerSlotIdentity).toSet();
+    final draftedByTeam = <String, String>{};
+    for (int teamIdx = 0; teamIdx < widget.teamCount; teamIdx++) {
+      for (final slot in _board.map((draftRow) => draftRow[teamIdx])) {
+        if (slot == null) continue;
+        draftedByTeam[_playerSlotIdentity(slot)] = _teamNames[teamIdx];
+      }
     }
     final picked = await Navigator.push<_PlayerSlot>(
       context,
       MaterialPageRoute(
         builder: (_) => PlayerSelectPage(
-          available: _selectablePlayersForTeam(col),
+          allPlayers: _playerPool,
+          selectablePlayerIds: selectableIds,
+          draftedByTeam: draftedByTeam,
+          isSoccer: widget.isSoccer,
           timeListenable: _timeLabel,
           filters: _rules.filters,
         ),
       ),
     );
     if (picked != null) {
+      if (!_canCurrentUserPickCell(row, col)) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text('지금은 내 팀 차례가 아닙니다.')));
+        }
+        return;
+      }
       setState(() {
         _board[row][col] = picked;
       });
@@ -918,10 +1091,10 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
 
   String get _footerLabel {
     if (_draftComplete) {
-      return widget.isMock ? 'Mock Draft 완료' : 'Draft 완료 · 빈칸 자동 보정까지 반영됨';
+      return widget.isMock ? '모의 드래프트 완료' : '드래프트 완료 · 빈칸 자동 보정까지 반영됨';
     }
     if (_isBeforeActualStart) {
-      return 'Draft 시작 대기';
+      return '드래프트 시작 대기';
     }
     final (curRow, curCol) = _idxToPos(_order[_currentIndex]);
     return '현재 픽: ${_teamNames[curCol]} · ${_ord(curRow + 1)} 라운드';
@@ -929,13 +1102,14 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
     if (_isLoadingPlayerPool) {
       return Scaffold(
         appBar: AppBar(
+          backgroundColor: _draftSurface,
+          foregroundColor: _draftInk,
+          surfaceTintColor: _draftSurface,
           title: Text(
-            '${widget.leagueName} ${widget.isMock ? 'Mock Draft' : 'Draft'}',
+            '${widget.leagueName} ${widget.isMock ? '모의 드래프트' : '드래프트'}',
           ),
         ),
         body: const Center(
@@ -955,9 +1129,13 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
     }
 
     return Scaffold(
+      backgroundColor: _draftSurface,
       appBar: AppBar(
+        backgroundColor: _draftSurface,
+        foregroundColor: _draftInk,
+        surfaceTintColor: _draftSurface,
         title: Text(
-          '${widget.leagueName} ${widget.isMock ? 'Mock Draft' : 'Draft'}',
+          '${widget.leagueName} ${widget.isMock ? '모의 드래프트' : '드래프트'}',
         ),
       ),
       body: Column(
@@ -967,31 +1145,33 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
             margin: const EdgeInsets.symmetric(horizontal: 16),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: widget.isMock
-                  ? Colors.orange.withOpacity(0.10)
-                  : cs.primary.withOpacity(0.10),
+              color: widget.isMock ? const Color(0xFFFFF4E8) : _draftAccentSoft,
               borderRadius: BorderRadius.circular(999),
               border: Border.all(
                 color: widget.isMock
-                    ? Colors.orange.withOpacity(0.24)
-                    : cs.primary.withOpacity(0.24),
+                    ? const Color(0xFFF3C98B)
+                    : _draftAccentBorder,
               ),
             ),
             child: Text(
               widget.isMock
-                  ? 'Mock Draft · ${widget.isSoccer ? 'K리그 18명' : 'KBO 21명'} 기준으로 연습용으로 진행됩니다.'
-                  : '실제 Draft · ${_rules.rosterSummary}',
+                  ? '모의 드래프트 · ${widget.isSoccer ? 'K리그 18명' : 'KBO 21명'} 기준으로 연습용으로 진행됩니다.'
+                  : '실제 드래프트 · ${_rules.rosterSummary}',
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 fontWeight: FontWeight.w700,
-                color: cs.onSurface,
+                color: _draftInk,
               ),
             ),
           ),
           const SizedBox(height: 10),
           Text(
             _timerText,
-            style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
+            style: const TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w800,
+              color: _draftInk,
+            ),
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -1023,14 +1203,15 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
                                   builder: (context, _) {
                                     final active = _isCurrentCell(r, teamIdx);
                                     final bg = active
-                                        ? cs.error.withOpacity(
-                                            _blinkController.value * 0.35,
+                                        ? _draftAccent.withValues(
+                                            alpha:
+                                                _blinkController.value * 0.35,
                                           )
                                         : Colors.transparent;
                                     return Container(
                                       decoration: BoxDecoration(
                                         border: Border.all(
-                                          color: Colors.black54,
+                                          color: const Color(0xFFD6DBD1),
                                           width: 0.8,
                                         ),
                                         color: bg,
@@ -1069,7 +1250,10 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
             padding: const EdgeInsets.all(12.0),
             child: Text(
               _footerLabel,
-              style: const TextStyle(fontWeight: FontWeight.w700),
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: _draftMuted,
+              ),
             ),
           ),
         ],
@@ -1079,12 +1263,18 @@ class _DraftPageState extends State<DraftPage> with TickerProviderStateMixin {
 }
 
 class PlayerSelectPage extends StatefulWidget {
-  final List<_PlayerSlot> available;
+  final List<_PlayerSlot> allPlayers;
+  final Set<String> selectablePlayerIds;
+  final Map<String, String> draftedByTeam;
+  final bool isSoccer;
   final ValueListenable<String> timeListenable;
   final List<_DraftPlayerFilter> filters;
   const PlayerSelectPage({
     super.key,
-    required this.available,
+    required this.allPlayers,
+    required this.selectablePlayerIds,
+    required this.draftedByTeam,
+    required this.isSoccer,
     required this.timeListenable,
     required this.filters,
   });
@@ -1096,21 +1286,27 @@ class PlayerSelectPage extends StatefulWidget {
 class _PlayerSelectPageState extends State<PlayerSelectPage> {
   _DraftPlayerFilter _filter = _DraftPlayerFilter.all;
   String _query = '';
+  bool _sortByAptsDesc = false;
+  late final Future<Map<String, double>> _profileAptsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _profileAptsFuture = _loadProfileAptsForSlots(
+      widget.allPlayers,
+      isSoccer: widget.isSoccer,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    final filtered = widget.available.where((p) {
-      final filterPosition = _filter.position;
-      final matchesFilter =
-          filterPosition == null || p.position == filterPosition;
-      final matchesQuery =
-          _query.isEmpty || p.name.toLowerCase().contains(_query.toLowerCase());
-      return matchesFilter && matchesQuery;
-    }).toList();
-
     return Scaffold(
+      backgroundColor: _DraftPageState._draftSurface,
       appBar: AppBar(
-        title: const Text('Select Player'),
+        backgroundColor: _DraftPageState._draftSurface,
+        foregroundColor: _DraftPageState._draftInk,
+        surfaceTintColor: _DraftPageState._draftSurface,
+        title: const Text('선수 선택'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
@@ -1141,6 +1337,8 @@ class _PlayerSelectPageState extends State<PlayerSelectPage> {
                       hintText: '선수 검색',
                       prefixIcon: Icon(Icons.search),
                       border: OutlineInputBorder(),
+                      filled: true,
+                      fillColor: _DraftPageState._draftSubtle,
                     ),
                     onChanged: (v) => setState(() => _query = v),
                   ),
@@ -1148,37 +1346,206 @@ class _PlayerSelectPageState extends State<PlayerSelectPage> {
               ],
             ),
           ),
-          Wrap(
-            spacing: 8,
-            children: widget.filters.map((f) {
-              final active = _filter == f;
-              return ChoiceChip(
-                label: Text(f.label),
-                selected: active,
-                onSelected: (_) => setState(() => _filter = f),
-              );
-            }).toList(),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ...widget.filters.map((f) {
+                  final active = _filter == f;
+                  return ChoiceChip(
+                    label: Text(f.label),
+                    selected: active,
+                    onSelected: (_) => setState(() => _filter = f),
+                    selectedColor: _DraftPageState._draftAccentSoft,
+                    backgroundColor: Colors.white,
+                    side: BorderSide(
+                      color: active
+                          ? _DraftPageState._draftAccent
+                          : const Color(0xFFD6DBD1),
+                    ),
+                    labelStyle: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: active
+                          ? _DraftPageState._draftAccent
+                          : _DraftPageState._draftMuted,
+                    ),
+                  );
+                }),
+                FilterChip(
+                  label: const Text('Apts 높은 순'),
+                  selected: _sortByAptsDesc,
+                  onSelected: (selected) {
+                    setState(() => _sortByAptsDesc = selected);
+                  },
+                  selectedColor: _DraftPageState._draftAccentSoft,
+                  backgroundColor: Colors.white,
+                  side: BorderSide(
+                    color: _sortByAptsDesc
+                        ? _DraftPageState._draftAccent
+                        : const Color(0xFFD6DBD1),
+                  ),
+                  labelStyle: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: _sortByAptsDesc
+                        ? _DraftPageState._draftAccent
+                        : _DraftPageState._draftMuted,
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           Expanded(
-            child: ListView.builder(
-              itemCount: filtered.length,
-              itemBuilder: (ctx, i) {
-                final p = filtered[i];
-                return ListTile(
-                  leading: CircleAvatar(
-                    backgroundColor: Colors.blueAccent.withOpacity(0.1),
-                    child: Text(
-                      p.position,
-                      style: const TextStyle(fontSize: 11, color: Colors.blue),
-                    ),
+            child: FutureBuilder<Map<String, double>>(
+              future: _profileAptsFuture,
+              builder: (context, snapshot) {
+                final aptsMap = {
+                  ..._cachedProfileAptsForSlots(
+                    widget.allPlayers,
+                    isSoccer: widget.isSoccer,
                   ),
-                  title: Text(p.name),
-                  subtitle: Text('포지션: ${p.position}'),
-                  trailing: ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx, p),
-                    child: const Text('Draft'),
-                  ),
+                  ...?snapshot.data,
+                };
+
+                double aptsOf(_PlayerSlot player) {
+                  final cached = aptsMap[_slotAptsKey(player)];
+                  if (cached != null) return cached;
+                  return _cachedProjectedFallbackForSlot(
+                        player,
+                        isSoccer: widget.isSoccer,
+                      ) ??
+                      0.0;
+                }
+
+                final filtered =
+                    widget.allPlayers.where((p) {
+                      final playerId = _playerSlotIdentity(p);
+                      final draftedBy = widget.draftedByTeam[playerId];
+                      final filterPosition = _filter.position;
+                      final matchesFilter =
+                          filterPosition == null ||
+                          p.position == filterPosition;
+                      final matchesQuery =
+                          _query.isEmpty ||
+                          p.name.toLowerCase().contains(_query.toLowerCase());
+                      final visible =
+                          widget.selectablePlayerIds.contains(playerId) ||
+                          draftedBy != null;
+                      return visible && matchesFilter && matchesQuery;
+                    }).toList()..sort((a, b) {
+                      final leftDrafted = widget.draftedByTeam.containsKey(
+                        _playerSlotIdentity(a),
+                      );
+                      final rightDrafted = widget.draftedByTeam.containsKey(
+                        _playerSlotIdentity(b),
+                      );
+                      if (leftDrafted != rightDrafted) {
+                        return leftDrafted ? 1 : -1;
+                      }
+                      if (_sortByAptsDesc) {
+                        final aptsCompare = aptsOf(b).compareTo(aptsOf(a));
+                        if (aptsCompare != 0) return aptsCompare;
+                      }
+                      return a.name.compareTo(b.name);
+                    });
+
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    filtered.isEmpty) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                return ListView.builder(
+                  itemCount: filtered.length,
+                  itemBuilder: (ctx, i) {
+                    final p = filtered[i];
+                    final playerId = _playerSlotIdentity(p);
+                    final draftedBy = widget.draftedByTeam[playerId];
+                    final canDraft =
+                        widget.selectablePlayerIds.contains(playerId) &&
+                        draftedBy == null;
+                    final apts = aptsMap[_slotAptsKey(p)];
+                    final clubLabel = p.club.isNotEmpty
+                        ? _displayFantasyClubName(
+                            p.club,
+                            isSoccer: widget.isSoccer,
+                          )
+                        : '-';
+                    final aptsLabel = apts == null
+                        ? 'Apts -'
+                        : 'Apts ${apts.toStringAsFixed(1)}';
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: _DraftPageState._draftAccentSoft,
+                        child: Text(
+                          p.position,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: _DraftPageState._draftAccent,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                      title: Text(p.name),
+                      subtitle: Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              clubLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: _DraftPageState._draftMuted,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            aptsLabel,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: _aptsDisplayColor(apts),
+                            ),
+                          ),
+                        ],
+                      ),
+                      trailing: canDraft
+                          ? ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _DraftPageState._draftAccent,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () => Navigator.pop(ctx, p),
+                              child: const Text('드래프트'),
+                            )
+                          : Container(
+                              constraints: const BoxConstraints(minWidth: 92),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF3F4F6),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: const Color(0xFFE5E7EB),
+                                ),
+                              ),
+                              child: Text(
+                                draftedBy ?? '선택 불가',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF6B7280),
+                                ),
+                              ),
+                            ),
+                    );
+                  },
                 );
               },
             ),

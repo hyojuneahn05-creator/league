@@ -114,6 +114,20 @@ class LeagueService {
     });
   }
 
+  Future<void> deleteLeague(String leagueId) async {
+    final id = leagueId.trim();
+    if (id.isEmpty) {
+      throw ArgumentError('leagueId is empty');
+    }
+
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw StateError('Login required');
+    }
+
+    await _firestore.collection('leagues').doc(id).delete();
+  }
+
   Future<Map<String, dynamic>> joinLeagueByInviteCode(String inviteCode) async {
     final code = inviteCode.trim().toUpperCase();
     if (code.isEmpty) {
@@ -155,5 +169,236 @@ class LeagueService {
       'fantasySchedule': fantasySchedule,
     });
     return Map<String, dynamic>.from(result.data);
+  }
+
+  Future<Map<String, dynamic>> updateFantasyRoster({
+    required String leagueId,
+    required String teamName,
+    required List<Map<String, dynamic>> roster,
+    required List<Map<String, dynamic>> starting,
+    required List<Map<String, dynamic>> bench,
+    String? captainName,
+    String? viceCaptainName,
+    String? captainPlayerId,
+    String? viceCaptainPlayerId,
+    List<Map<String, dynamic>>? kboRoundScoreStates,
+  }) async {
+    final id = leagueId.trim();
+    if (id.isEmpty) {
+      throw ArgumentError('leagueId is empty');
+    }
+
+    final callable = _functions.httpsCallable('updateFantasyRoster');
+    final payload = <String, dynamic>{
+      'leagueId': id,
+      'teamName': teamName,
+      'roster': roster,
+      'starting': starting,
+      'bench': bench,
+      'captainName': captainName,
+      'viceCaptainName': viceCaptainName,
+      'captainPlayerId': captainPlayerId,
+      'viceCaptainPlayerId': viceCaptainPlayerId,
+      if (kboRoundScoreStates != null)
+        'kboRoundScoreStates': kboRoundScoreStates,
+    };
+    final result = await callable.call<Map<String, dynamic>>(payload);
+    return Map<String, dynamic>.from(result.data);
+  }
+
+  Future<Map<String, dynamic>> renameFantasyTeamIdentity({
+    required String teamName,
+  }) async {
+    final normalizedName = teamName.trim();
+    if (normalizedName.isEmpty) {
+      throw ArgumentError('teamName is empty');
+    }
+
+    final callable = _functions.httpsCallable('renameFantasyTeamIdentity');
+    final result = await callable.call<Map<String, dynamic>>({
+      'teamName': normalizedName,
+    });
+    return Map<String, dynamic>.from(result.data);
+  }
+
+  Future<Map<String, dynamic>?> getPublicUserProfile(String uid) async {
+    final normalizedUid = uid.trim();
+    if (normalizedUid.isEmpty) {
+      throw ArgumentError('uid is empty');
+    }
+
+    final callable = _functions.httpsCallable('getPublicUserProfile');
+    final result = await callable.call<Map<String, dynamic>>({
+      'uid': normalizedUid,
+    });
+    final data = Map<String, dynamic>.from(result.data);
+    final profile = data['profile'];
+    if (profile is Map) {
+      return Map<String, dynamic>.from(profile);
+    }
+    return null;
+  }
+
+  Future<String> submitTradeRequest({
+    required String leagueId,
+    required String leagueName,
+    required bool isSoccer,
+    required String fromUid,
+    required String fromTeamName,
+    required String toUid,
+    required String toTeamName,
+    required List<Map<String, dynamic>> fromPlayers,
+    required List<Map<String, dynamic>> toPlayers,
+  }) async {
+    final id = leagueId.trim();
+    if (id.isEmpty) {
+      throw ArgumentError('leagueId is empty');
+    }
+    if (fromUid.trim().isEmpty || toUid.trim().isEmpty) {
+      throw ArgumentError('trade participants are empty');
+    }
+
+    final requestRef = _firestore.collection('tradeRequests').doc();
+    await requestRef.set({
+      'leagueId': id,
+      'leagueName': leagueName.trim(),
+      'sport': isSoccer ? 'soccer' : 'baseball',
+      'status': 'pending',
+      'participants': [fromUid.trim(), toUid.trim()],
+      'fromUid': fromUid.trim(),
+      'fromTeamName': fromTeamName.trim(),
+      'toUid': toUid.trim(),
+      'toTeamName': toTeamName.trim(),
+      'fromPlayers': fromPlayers,
+      'toPlayers': toPlayers,
+      'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+    return requestRef.id;
+  }
+
+  Future<List<Map<String, dynamic>>> getTradeRequestsForCurrentUser() async {
+    final user = _auth.currentUser;
+    if (user == null) return const <Map<String, dynamic>>[];
+    try {
+      final snapshot = await _firestore
+          .collection('tradeRequests')
+          .where('participants', arrayContains: user.uid)
+          .get();
+
+      final requests = snapshot.docs.map((doc) {
+        final data = Map<String, dynamic>.from(doc.data());
+        data['id'] = doc.id;
+        return data;
+      }).toList();
+
+      requests.sort((a, b) {
+        final aTime = a['createdAt'];
+        final bTime = b['createdAt'];
+        final aDate = aTime is Timestamp ? aTime.toDate() : DateTime(1970);
+        final bDate = bTime is Timestamp ? bTime.toDate() : DateTime(1970);
+        return bDate.compareTo(aDate);
+      });
+      return requests;
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied') {
+        debugPrint('getTradeRequestsForCurrentUser permission denied');
+        return const <Map<String, dynamic>>[];
+      }
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getTradeRequestById(String requestId) async {
+    final id = requestId.trim();
+    if (id.isEmpty) {
+      throw ArgumentError('requestId is empty');
+    }
+    try {
+      final snapshot = await _firestore
+          .collection('tradeRequests')
+          .doc(id)
+          .get();
+      if (!snapshot.exists) return null;
+      final data = Map<String, dynamic>.from(snapshot.data() ?? const {});
+      data['id'] = snapshot.id;
+      return data;
+    } on FirebaseException catch (error) {
+      if (error.code == 'permission-denied') {
+        debugPrint('getTradeRequestById permission denied');
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> respondToTradeRequest({
+    required String requestId,
+    required String action,
+    Map<String, List<Map<String, dynamic>>>? kboRoundScoreStatesByTeam,
+  }) async {
+    final id = requestId.trim();
+    final normalizedAction = action.trim().toLowerCase();
+    if (id.isEmpty) {
+      throw ArgumentError('requestId is empty');
+    }
+    if (normalizedAction != 'accept' && normalizedAction != 'decline') {
+      throw ArgumentError('action must be accept or decline');
+    }
+    final callable = _functions.httpsCallable('respondToTradeRequest');
+    final payload = <String, dynamic>{
+      'requestId': id,
+      'action': normalizedAction,
+      if (kboRoundScoreStatesByTeam != null)
+        'kboRoundScoreStatesByTeam': kboRoundScoreStatesByTeam,
+    };
+    final result = await callable.call<Map<String, dynamic>>(payload);
+    return Map<String, dynamic>.from(result.data);
+  }
+
+  Future<List<Map<String, dynamic>>> getKLeagueWeeklyLeaderSnapshots(
+    String leagueId,
+  ) async {
+    final id = leagueId.trim();
+    if (id.isEmpty) {
+      throw ArgumentError('leagueId is empty');
+    }
+
+    final callable = _functions.httpsCallable(
+      'getKLeagueWeeklyLeaderSnapshots',
+    );
+    final result = await callable.call<Map<String, dynamic>>({'leagueId': id});
+    final data = Map<String, dynamic>.from(result.data);
+    final snapshots = data['snapshots'];
+    if (snapshots is! List) return const <Map<String, dynamic>>[];
+    return snapshots
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item.cast<Object?, Object?>()))
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> saveKLeagueWeeklyLeaderSnapshots({
+    required String leagueId,
+    required List<Map<String, dynamic>> snapshots,
+  }) async {
+    final id = leagueId.trim();
+    if (id.isEmpty) {
+      throw ArgumentError('leagueId is empty');
+    }
+
+    final callable = _functions.httpsCallable(
+      'saveKLeagueWeeklyLeaderSnapshots',
+    );
+    final result = await callable.call<Map<String, dynamic>>({
+      'leagueId': id,
+      'snapshots': snapshots,
+    });
+    final data = Map<String, dynamic>.from(result.data);
+    final saved = data['snapshots'];
+    if (saved is! List) return const <Map<String, dynamic>>[];
+    return saved
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item.cast<Object?, Object?>()))
+        .toList();
   }
 }

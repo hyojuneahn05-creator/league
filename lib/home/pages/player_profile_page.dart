@@ -54,6 +54,11 @@ final Map<String, bool> _cachedKboPlayerRoundPointsHasFullSeason =
 final Map<String, Future<double?>> _cachedKboPlayerAptsFutures =
     <String, Future<double?>>{};
 final Map<String, double?> _cachedKboPlayerApts = <String, double?>{};
+const FlutterSecureStorage _kboPlayerAptsStorage = FlutterSecureStorage(
+  iOptions: IOSOptions(accountName: 'leagueit_local_state'),
+);
+const String _kboPlayerAptsStorageKey = 'kbo.player_apts.v1';
+Future<void>? _kboPlayerAptsRestoreFuture;
 final Map<String, Future<Map<String, dynamic>>> _cachedKboMatchDetails =
     <String, Future<Map<String, dynamic>>>{};
 final Map<int, Future<Map<String, dynamic>>> _inFlightKboMatchDetailsByMatchId =
@@ -363,8 +368,9 @@ Future<void> _restorePersistedKLeaguePlayerRoundPointsCache() {
                 .whereType<_PlayerRoundPoints>()
                 .toList();
             if (updatedAt == null || roundPoints.isEmpty) continue;
-            if (DateTime.now().difference(updatedAt) >
-                _kLeagueProfileCacheTtl) {
+            final isExpired =
+                DateTime.now().difference(updatedAt) > _kLeagueProfileCacheTtl;
+            if (isExpired && (isSoccer || !hasFullSeason)) {
               continue;
             }
             final existingUpdatedAt = isSoccer
@@ -399,9 +405,18 @@ Future<void> _restorePersistedKLeaguePlayerRoundPointsCache() {
                   hasFullSeason;
               _cachedKboPlayerRoundPointsUpdatedAt[entry.key] = updatedAt;
               if (hasFullSeason) {
-                _cachedKboPlayerApts[entry.key] = _kLeagueAptsFromRoundPoints(
-                  roundPoints,
-                );
+                final apts = _kLeagueAptsFromRoundPoints(roundPoints);
+                _cachedKboPlayerApts[entry.key] = apts;
+                final parsedKey = _parseKboRoundPointsCacheKey(entry.key);
+                if (parsedKey != null) {
+                  _cachedKboPlayerApts[_kboSeasonAptsKey(
+                        playerName: parsedKey.playerName,
+                        club: parsedKey.club,
+                        preferredNumber: parsedKey.preferredNumber,
+                        preferredPosition: parsedKey.preferredPosition,
+                      )] =
+                      apts;
+                }
               }
             }
           }
@@ -502,12 +517,57 @@ Future<void> _persistKLeaguePlayerAptsCache() async {
   }
 }
 
+Future<void> _restorePersistedKboPlayerAptsCache() {
+  final inFlight = _kboPlayerAptsRestoreFuture;
+  if (inFlight != null) return inFlight;
+  final future =
+      () async {
+        try {
+          final raw = await _readLocalStateCacheWithLegacySecureStorage(
+            key: _kboPlayerAptsStorageKey,
+            legacyStorage: _kboPlayerAptsStorage,
+          );
+          if (raw == null || raw.trim().isEmpty) return;
+          final decoded = jsonDecode(raw);
+          if (decoded is! Map<String, dynamic>) return;
+          final entries = _fixtureAsMap(decoded['entries']);
+          for (final entry in entries.entries) {
+            final value = (entry.value as num?)?.toDouble();
+            if (value == null) continue;
+            _cachedKboPlayerApts[entry.key] = value;
+          }
+        } catch (error, stackTrace) {
+          debugPrint('restorePersistedKboPlayerAptsCache failed: $error');
+          debugPrint('$stackTrace');
+        }
+      }().whenComplete(() {
+        _kboPlayerAptsRestoreFuture = null;
+      });
+  _kboPlayerAptsRestoreFuture = future;
+  return future;
+}
+
+Future<void> _persistKboPlayerAptsCache() async {
+  try {
+    final payload = <String, dynamic>{
+      'entries': <String, double>{
+        for (final entry in _cachedKboPlayerApts.entries)
+          if (entry.value != null) entry.key: entry.value!,
+      },
+    };
+    await _writeLocalStateCache(_kboPlayerAptsStorageKey, jsonEncode(payload));
+  } catch (error, stackTrace) {
+    debugPrint('persistKboPlayerAptsCache failed: $error');
+    debugPrint('$stackTrace');
+  }
+}
+
 String _kLeagueRoundPointsCacheKey({
   required String playerName,
   required String club,
   int? preferredNumber,
 }) {
-  final resolvedMeta = _resolvePlayerMeta(playerName);
+  final resolvedMeta = _resolvePlayerMeta(playerName, asOf: DateTime.now());
   final targetNumber = preferredNumber != null && preferredNumber > 0
       ? preferredNumber
       : resolvedMeta.number;
@@ -599,6 +659,100 @@ String _kboSeasonAptsKey({
   return '$normalizedClub|$playerName|$targetNumber|$normalizedPosition';
 }
 
+List<String> _kboRoundPointsCacheKeyCandidates({
+  required String playerName,
+  required String club,
+  int? preferredNumber,
+  String? preferredPosition,
+}) {
+  final keys = <String>[];
+
+  void addKey({
+    required String club,
+    required int number,
+    required String position,
+  }) {
+    final key = _kboRoundPointsCacheKey(
+      playerName: playerName,
+      club: club,
+      preferredNumber: number,
+      preferredPosition: position,
+    );
+    if (!keys.contains(key)) {
+      keys.add(key);
+    }
+  }
+
+  addKey(
+    club: club,
+    number: preferredNumber ?? 0,
+    position: preferredPosition ?? '',
+  );
+
+  final resolvedMeta = _resolvePlayerMeta(playerName, asOf: DateTime.now());
+  addKey(
+    club: club.isNotEmpty ? club : resolvedMeta.club,
+    number: preferredNumber != null && preferredNumber > 0
+        ? preferredNumber
+        : resolvedMeta.number,
+    position: preferredPosition?.isNotEmpty == true
+        ? preferredPosition!
+        : resolvedMeta.position,
+  );
+
+  return keys;
+}
+
+({String cacheKey, List<_PlayerRoundPoints> roundPoints})?
+_cachedKboRoundPointsEntryForPlayer({
+  required String playerName,
+  required String club,
+  int? preferredNumber,
+  String? preferredPosition,
+  bool allowStale = true,
+}) {
+  for (final key in _kboRoundPointsCacheKeyCandidates(
+    playerName: playerName,
+    club: club,
+    preferredNumber: preferredNumber,
+    preferredPosition: preferredPosition,
+  )) {
+    final cached = _cachedKboPlayerRoundPoints[key];
+    if (cached == null) continue;
+    final cachedAt = _cachedKboPlayerRoundPointsUpdatedAt[key];
+    final isFresh =
+        cachedAt != null &&
+        DateTime.now().difference(cachedAt) <= _kboProfileCacheTtl;
+    if (!allowStale && !isFresh) {
+      continue;
+    }
+    return (cacheKey: key, roundPoints: cached);
+  }
+  return null;
+}
+
+({
+  String playerName,
+  String club,
+  int preferredNumber,
+  String preferredPosition,
+})?
+_parseKboRoundPointsCacheKey(String key) {
+  final parts = key.split('|');
+  if (parts.length < 4) return null;
+  final club = parts.first.trim();
+  final preferredPosition = parts.last.trim();
+  final preferredNumber = int.tryParse(parts[parts.length - 2]) ?? 0;
+  final playerName = parts.sublist(1, parts.length - 2).join('|').trim();
+  if (club.isEmpty || playerName.isEmpty) return null;
+  return (
+    playerName: playerName,
+    club: club,
+    preferredNumber: preferredNumber,
+    preferredPosition: preferredPosition,
+  );
+}
+
 bool _kboRoundPointsCoverTargetRounds(
   Iterable<_PlayerRoundPoints> roundPoints,
   Set<int> targetRounds,
@@ -631,22 +785,14 @@ List<_PlayerRoundPoints>? _cachedKboRoundPointsForPlayer({
   String? preferredPosition,
   bool allowStale = true,
 }) {
-  final key = _kboRoundPointsCacheKey(
+  final entry = _cachedKboRoundPointsEntryForPlayer(
     playerName: playerName,
     club: club,
     preferredNumber: preferredNumber,
     preferredPosition: preferredPosition,
+    allowStale: allowStale,
   );
-  final cached = _cachedKboPlayerRoundPoints[key];
-  if (cached == null) return null;
-  final cachedAt = _cachedKboPlayerRoundPointsUpdatedAt[key];
-  final isFresh =
-      cachedAt != null &&
-      DateTime.now().difference(cachedAt) <= _kboProfileCacheTtl;
-  if (!allowStale && !isFresh) {
-    return null;
-  }
-  return cached;
+  return entry?.roundPoints;
 }
 
 List<_PlayerRoundPoints>? _cachedFullSeasonKboRoundPointsForPlayer({
@@ -656,21 +802,17 @@ List<_PlayerRoundPoints>? _cachedFullSeasonKboRoundPointsForPlayer({
   String? preferredPosition,
   bool allowStale = true,
 }) {
-  final cached = _cachedKboRoundPointsForPlayer(
+  final entry = _cachedKboRoundPointsEntryForPlayer(
     playerName: playerName,
     club: club,
     preferredNumber: preferredNumber,
     preferredPosition: preferredPosition,
     allowStale: allowStale,
   );
-  if (cached == null) return null;
-  final key = _kboRoundPointsCacheKey(
-    playerName: playerName,
-    club: club,
-    preferredNumber: preferredNumber,
-    preferredPosition: preferredPosition,
-  );
-  return _cachedKboPlayerRoundPointsHasFullSeason[key] == true ? cached : null;
+  if (entry == null) return null;
+  return _cachedKboPlayerRoundPointsHasFullSeason[entry.cacheKey] == true
+      ? entry.roundPoints
+      : null;
 }
 
 double? _cachedFullSeasonKboAptsForPlayer({
@@ -705,6 +847,12 @@ double? _cachedFullSeasonKboAptsForPlayer({
   if (_cachedKboPlayerRoundPointsHasFullSeason[roundPointsKey] == true &&
       _cachedKboPlayerApts.containsKey(cacheKey)) {
     return _cachedKboPlayerApts[cacheKey];
+  }
+  if (_cachedKboPlayerRoundPointsHasFullSeason[roundPointsKey] == true &&
+      _cachedKboPlayerApts.containsKey(roundPointsKey)) {
+    final legacyApts = _cachedKboPlayerApts[roundPointsKey];
+    _cachedKboPlayerApts[cacheKey] = legacyApts;
+    return legacyApts;
   }
   return null;
 }
@@ -803,6 +951,7 @@ Future<Map<String, dynamic>> _loadCachedKboMatchDetail(
   bool forceRefresh = false,
   int? fantasyRound,
 }) async {
+  await _loadKboDraftPlayerDirectory();
   final cacheKey = _kboMatchDetailCacheKey(matchId, fantasyRound: fantasyRound);
   final now = DateTime.now();
   final inFlight = _cachedKboMatchDetails[cacheKey];
@@ -1076,8 +1225,6 @@ bool _kboPlayerStatMatchesProfile(
   required ({String position, String club, int number}) meta,
 }) {
   final statName = '${stat['name'] ?? ''}'.trim();
-  if (statName != playerName) return false;
-
   final statClub = _normalizeKboDraftClub('${stat['team'] ?? ''}');
   final profileClub = _normalizeKboDraftClub(meta.club);
   if (statClub.isNotEmpty &&
@@ -1091,8 +1238,29 @@ bool _kboPlayerStatMatchesProfile(
     return false;
   }
 
+  final resolvedStatName = _kboDisplayPlayerName(
+    statName,
+    club: statClub.isNotEmpty ? statClub : profileClub,
+    number: statNumber,
+  );
+  final normalizedProfileName = _normalizeKboDirectoryName(playerName);
+  final normalizedStatName = _normalizeKboDirectoryName(statName);
+  final normalizedResolvedStatName = _normalizeKboDirectoryName(
+    resolvedStatName,
+  );
+  if (normalizedProfileName.isNotEmpty &&
+      normalizedProfileName != normalizedStatName &&
+      normalizedProfileName != normalizedResolvedStatName) {
+    return false;
+  }
+
   final statPosition = _normalizeKboProfilePosition(
-    '${stat['position'] ?? ''}',
+    _resolveKboPlayerPosition(
+      '${stat['position'] ?? ''}',
+      club: statClub.isNotEmpty ? statClub : profileClub,
+      rawName: statName,
+      number: statNumber,
+    ),
   );
   final profilePosition = _normalizeKboProfilePosition(meta.position);
   if (profilePosition.isNotEmpty &&
@@ -1459,7 +1627,7 @@ Future<double?> _loadKLeaguePlayerAptsShared({
   required String club,
   int? preferredNumber,
 }) {
-  final resolvedMeta = _resolvePlayerMeta(playerName);
+  final resolvedMeta = _resolvePlayerMeta(playerName, asOf: DateTime.now());
   final targetNumber = preferredNumber != null && preferredNumber > 0
       ? preferredNumber
       : resolvedMeta.number;
@@ -1528,6 +1696,10 @@ Future<double?> _loadKboPlayerAptsShared({
   );
   final inFlight = _cachedKboPlayerAptsFutures[cacheKey];
   if (inFlight != null) return inFlight;
+  final cachedApts = _cachedKboPlayerApts[cacheKey];
+  if (_cachedKboPlayerApts.containsKey(cacheKey)) {
+    return Future.value(cachedApts);
+  }
 
   final cachedRoundPoints = _cachedFullSeasonKboRoundPointsForPlayer(
     playerName: playerName,
@@ -1538,6 +1710,7 @@ Future<double?> _loadKboPlayerAptsShared({
   if (cachedRoundPoints != null) {
     final apts = _kLeagueAptsFromRoundPoints(cachedRoundPoints);
     _cachedKboPlayerApts[cacheKey] = apts;
+    unawaited(_persistKboPlayerAptsCache());
     return Future.value(apts);
   }
   final roundPointsKey = _kboRoundPointsCacheKey(
@@ -1550,12 +1723,23 @@ Future<double?> _loadKboPlayerAptsShared({
       _cachedKboPlayerApts.containsKey(cacheKey)) {
     return Future.value(_cachedKboPlayerApts[cacheKey]);
   }
+  if (_cachedKboPlayerRoundPointsHasFullSeason[roundPointsKey] == true &&
+      _cachedKboPlayerApts.containsKey(roundPointsKey)) {
+    final legacyApts = _cachedKboPlayerApts[roundPointsKey];
+    _cachedKboPlayerApts[cacheKey] = legacyApts;
+    return Future.value(legacyApts);
+  }
   if (!allowHistoryFetch) {
     return Future.value(_cachedKboPlayerApts[cacheKey]);
   }
 
   final future =
       () async {
+        await _restorePersistedKboPlayerAptsCache();
+        final restoredApts = _cachedKboPlayerApts[cacheKey];
+        if (_cachedKboPlayerApts.containsKey(cacheKey)) {
+          return restoredApts;
+        }
         final roundPoints = await _loadKboRoundPointsForPlayerShared(
           playerName: playerName,
           club: club,
@@ -1564,6 +1748,7 @@ Future<double?> _loadKboPlayerAptsShared({
         );
         final apts = _kLeagueAptsFromRoundPoints(roundPoints);
         _cachedKboPlayerApts[cacheKey] = apts;
+        unawaited(_persistKboPlayerAptsCache());
         return apts;
       }().whenComplete(() {
         _cachedKboPlayerAptsFutures.remove(cacheKey);
@@ -1579,7 +1764,7 @@ Future<List<_PlayerRoundPoints>> _loadKLeagueRoundPointsForPlayerShared({
   int? preferredNumber,
   bool forceRefresh = false,
 }) async {
-  final resolvedMeta = _resolvePlayerMeta(playerName);
+  final resolvedMeta = _resolvePlayerMeta(playerName, asOf: DateTime.now());
   final targetNumber = preferredNumber != null && preferredNumber > 0
       ? preferredNumber
       : resolvedMeta.number;
@@ -1625,7 +1810,6 @@ Future<List<_PlayerRoundPoints>> _loadKLeagueRoundPointsForPlayerShared({
         final rawFixtures = _fixtureAsList(leagueData['fixtures']);
         final fixtures = _kLeagueFixturesFromApi(rawFixtures);
         final now = DateTime.now();
-        final canonicalClub = _canonicalKLeagueClub(club);
 
         int latestRound = 0;
         for (final fixture in fixtures) {
@@ -1642,7 +1826,15 @@ Future<List<_PlayerRoundPoints>> _loadKLeagueRoundPointsForPlayerShared({
 
         final opponentByRound = <int, String>{};
         final relevantFixtures =
-            <({int round, int fixtureId, String opponentLabel})>[];
+            <
+              ({
+                int round,
+                int fixtureId,
+                String canonicalClub,
+                String opponentLabel,
+                int number,
+              })
+            >[];
         for (final raw in rawFixtures) {
           final map = _fixtureAsMap(raw);
           final league = _fixtureAsMap(map['league']);
@@ -1653,6 +1845,9 @@ Future<List<_PlayerRoundPoints>> _loadKLeagueRoundPointsForPlayerShared({
           final teams = _fixtureAsMap(map['teams']);
           final date = DateTime.tryParse(_fixtureText(fixture['date']));
           if (date == null) continue;
+          final fixtureMeta = _resolvePlayerMeta(playerName, asOf: date);
+          final fixtureClub = _canonicalKLeagueClub(fixtureMeta.club);
+          final fixtureNumber = fixtureMeta.number;
           final homeClub = _canonicalKLeagueClub(
             _kLeagueDisplayTeamName(
               _fixtureText(_fixtureAsMap(teams['home'])['name']),
@@ -1663,8 +1858,8 @@ Future<List<_PlayerRoundPoints>> _loadKLeagueRoundPointsForPlayerShared({
               _fixtureText(_fixtureAsMap(teams['away'])['name']),
             ),
           );
-          if (homeClub != canonicalClub && awayClub != canonicalClub) continue;
-          final opponentLabel = homeClub == canonicalClub
+          if (homeClub != fixtureClub && awayClub != fixtureClub) continue;
+          final opponentLabel = homeClub == fixtureClub
               ? _kLeagueDisplayTeamName(
                   _fixtureText(_fixtureAsMap(teams['away'])['name']),
                 )
@@ -1679,7 +1874,9 @@ Future<List<_PlayerRoundPoints>> _loadKLeagueRoundPointsForPlayerShared({
           relevantFixtures.add((
             round: round,
             fixtureId: fixtureId,
+            canonicalClub: fixtureClub,
             opponentLabel: opponentLabel,
+            number: fixtureNumber,
           ));
         }
 
@@ -1702,8 +1899,8 @@ Future<List<_PlayerRoundPoints>> _loadKLeagueRoundPointsForPlayerShared({
                   _kLeagueRoundScoreBreakdownForPlayerFromDetailShared(
                     detail,
                     playerName: playerName,
-                    canonicalClub: canonicalClub,
-                    number: '$targetNumber',
+                    canonicalClub: fixtureInfo.canonicalClub,
+                    number: '${fixtureInfo.number}',
                     opponentLabel: fixtureInfo.opponentLabel,
                   );
               return (round: fixtureInfo.round, score: score);
@@ -1786,7 +1983,7 @@ Future<List<_PlayerRoundPoints>> _loadKboRoundPointsForPlayerShared({
   Set<int>? targetRounds,
   bool logFailures = true,
 }) async {
-  final resolvedMeta = _resolvePlayerMeta(playerName);
+  final resolvedMeta = _resolvePlayerMeta(playerName, asOf: DateTime.now());
   final targetNumber = preferredNumber != null && preferredNumber > 0
       ? preferredNumber
       : resolvedMeta.number;
@@ -2117,6 +2314,7 @@ Future<List<_PlayerRoundPoints>> _loadKboRoundPointsForPlayerShared({
           _cachedKboPlayerApts[seasonAptsKey] = _kLeagueAptsFromRoundPoints(
             mergedResult,
           );
+          unawaited(_persistKboPlayerAptsCache());
         }
         _persistedKLeaguePlayerRoundPointsEntries[playerCacheKey] =
             _PersistedPlayerRoundPointsEntry(
@@ -2207,9 +2405,13 @@ _kLeagueRoundScoreBreakdownForPlayerFromDetailShared(
   required String number,
   required String opponentLabel,
 }) {
-  final fallbackMeta = _resolvePlayerMeta(playerName);
   final detailFixture = _fixtureAsMap(detail['fixture']);
   final fixtureMeta = _fixtureAsMap(detailFixture['fixture']);
+  final fixtureDate = DateTime.tryParse(_fixtureText(fixtureMeta['date']));
+  final fallbackMeta = _resolvePlayerMeta(
+    playerName,
+    asOf: fixtureDate ?? DateTime.now(),
+  );
   final teams = _fixtureAsMap(detailFixture['teams']);
   final goals = _fixtureAsMap(detailFixture['goals']);
   final lineups = _fixtureAsList(detail['lineups']);
@@ -2533,7 +2735,7 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
             club: widget.metaOverride!.club,
             number: widget.metaOverride!.number,
           )
-        : _resolvePlayerMeta(widget.name);
+        : _resolvePlayerMeta(widget.name, asOf: DateTime.now());
   }
 
   void _resetProfileFutures() {
@@ -2650,28 +2852,12 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
         );
       } else if (_isKnownKboPlayerMeta(meta)) {
         await _restorePersistedKLeaguePlayerRoundPointsCache();
-        final cachedFullSeason = _cachedFullSeasonKboRoundPointsForPlayer(
+        roundPoints = await _loadKboRoundPointsForPlayerShared(
           playerName: widget.name,
           club: meta.club,
           preferredNumber: meta.number,
           preferredPosition: meta.position,
         );
-        if (cachedFullSeason != null && cachedFullSeason.isNotEmpty) {
-          roundPoints = cachedFullSeason;
-        } else {
-          final currentRound = _latestStartedKboFantasyRound(DateTime.now());
-          if (currentRound <= 0) {
-            roundPoints = const <_PlayerRoundPoints>[];
-          } else {
-            roundPoints = await _loadKboRoundPointsForPlayerShared(
-              playerName: widget.name,
-              club: meta.club,
-              preferredNumber: meta.number,
-              preferredPosition: meta.position,
-              targetRounds: <int>{currentRound},
-            );
-          }
-        }
       } else {
         roundPoints = const <_PlayerRoundPoints>[];
       }
@@ -2718,7 +2904,7 @@ class _PlayerProfilePageState extends State<PlayerProfilePage> {
             club: widget.metaOverride!.club,
             number: widget.metaOverride!.number,
           )
-        : _resolvePlayerMeta(widget.name);
+        : _resolvePlayerMeta(widget.name, asOf: DateTime.now());
     // Prefer the app's session ownership cache when available so profiles opened
     // from different entry points (home search, schedule, etc.) stay consistent.
     final profileIdentity = _playerSlotIdentity(
@@ -3412,7 +3598,7 @@ _PlayerSlot _slotForName(String name) {
     );
     if (hit != null) return hit;
   }
-  final meta = _resolvePlayerMeta(name);
+  final meta = _resolvePlayerMeta(name, asOf: DateTime.now());
   final seed = _stableSeedFromKey('pts|$name|${meta.club}|${meta.number}');
   return _PlayerSlot(
     name: name,

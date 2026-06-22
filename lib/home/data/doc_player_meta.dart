@@ -21,6 +21,38 @@ class _DocRosterEntry {
   const _DocRosterEntry({required this.name, required this.meta});
 }
 
+class _KLeagueTransferOverride {
+  final String fromClub;
+  final String toClub;
+  final String position;
+  final int number;
+  final int effectiveYear;
+  final int effectiveMonth;
+  final int effectiveDay;
+
+  const _KLeagueTransferOverride({
+    required this.fromClub,
+    required this.toClub,
+    required this.position,
+    required this.number,
+    required this.effectiveYear,
+    required this.effectiveMonth,
+    required this.effectiveDay,
+  });
+}
+
+const Map<String, _KLeagueTransferOverride> _kLeagueTransferOverridesByName = {
+  '토마스': _KLeagueTransferOverride(
+    fromClub: 'FC 안양',
+    toClub: '울산 HD',
+    position: 'DF',
+    number: 55,
+    effectiveYear: 2026,
+    effectiveMonth: 6,
+    effectiveDay: 16,
+  ),
+};
+
 const List<_DocRosterEntry> _docRosterEntries = [
   _DocRosterEntry(
     name: '송범근',
@@ -1676,6 +1708,7 @@ const Map<String, _DocPlayerMeta> _docMetaByName = {
   '류성민': _DocPlayerMeta(position: 'GK', club: '울산 HD', number: 13),
   '윤평국': _DocPlayerMeta(position: 'GK', club: '포항 스틸러스', number: 1),
   '황인재': _DocPlayerMeta(position: 'GK', club: '포항 스틸러스', number: 21),
+  '황인제': _DocPlayerMeta(position: 'GK', club: '포항 스틸러스', number: 21),
   '홍성민': _DocPlayerMeta(position: 'GK', club: '포항 스틸러스', number: 29),
   '권능': _DocPlayerMeta(position: 'GK', club: '포항 스틸러스', number: 91),
   '이승환': _DocPlayerMeta(position: 'GK', club: '포항 스틸러스', number: 23),
@@ -2081,6 +2114,86 @@ List<_DocRosterEntry> _docRosterForClub(String club) {
   return _docRosterEntries.where((e) => _clubKey(e.meta.club) == key).toList();
 }
 
+String _normalizeDocSoccerPosition(String value) => value.trim().toUpperCase();
+
+DateTime _kLeagueTransferEffectiveDate(_KLeagueTransferOverride override) {
+  return DateTime(
+    override.effectiveYear,
+    override.effectiveMonth,
+    override.effectiveDay,
+  );
+}
+
+bool _isKLeagueTransferEffective(
+  _KLeagueTransferOverride override, {
+  DateTime? asOf,
+}) {
+  final current = asOf ?? DateTime.now();
+  final day = DateTime(current.year, current.month, current.day);
+  return !day.isBefore(_kLeagueTransferEffectiveDate(override));
+}
+
+({String position, String club, int number}) _applyKLeagueTransferOverride(
+  String name,
+  ({String position, String club, int number}) meta, {
+  DateTime? asOf,
+}) {
+  final override = _kLeagueTransferOverridesByName[name];
+  if (override == null || !_isKLeagueTransferEffective(override, asOf: asOf)) {
+    return meta;
+  }
+  final canonicalClub = _canonicalKLeagueClub(meta.club);
+  final fromCanonical = _canonicalKLeagueClub(override.fromClub);
+  final toCanonical = _canonicalKLeagueClub(override.toClub);
+  if (canonicalClub.isNotEmpty &&
+      canonicalClub != fromCanonical &&
+      canonicalClub != toCanonical) {
+    return meta;
+  }
+  return (
+    position: override.position.isNotEmpty ? override.position : meta.position,
+    club: override.toClub,
+    number: override.number > 0 ? override.number : meta.number,
+  );
+}
+
+String _kLeagueTransferredRosterNameForClubNumber(
+  String club,
+  int number, {
+  DateTime? asOf,
+}) {
+  final canonicalClub = _canonicalKLeagueClub(club);
+  for (final entry in _kLeagueTransferOverridesByName.entries) {
+    final override = entry.value;
+    if (!_isKLeagueTransferEffective(override, asOf: asOf)) continue;
+    if (override.number != number) continue;
+    if (_canonicalKLeagueClub(override.toClub) == canonicalClub) {
+      return entry.key;
+    }
+  }
+  return '';
+}
+
+int _kLeagueTransferredRosterNumberForClubNamePosition({
+  required String club,
+  required String name,
+  required String position,
+  DateTime? asOf,
+}) {
+  final override = _kLeagueTransferOverridesByName[name];
+  if (override == null || !_isKLeagueTransferEffective(override, asOf: asOf)) {
+    return 0;
+  }
+  if (_canonicalKLeagueClub(club) != _canonicalKLeagueClub(override.toClub)) {
+    return 0;
+  }
+  if (_normalizeDocSoccerPosition(position) !=
+      _normalizeDocSoccerPosition(override.position)) {
+    return 0;
+  }
+  return override.number;
+}
+
 // Fallback (for names missing from the doc mapping).
 String _fallbackKLeagueClubForName(String name) {
   final teams = _kLeagueTeams;
@@ -2104,10 +2217,21 @@ String _fallbackPositionForName(String name) {
 }
 
 // Unified accessor used across the app.
-({String position, String club, int number}) _resolvePlayerMeta(String name) {
+({String position, String club, int number}) _resolvePlayerMeta(
+  String name, {
+  DateTime? asOf,
+}) {
+  final api = _apiPlayerMetaByName[name];
+  if (api != null) {
+    return _applyKLeagueTransferOverride(name, api, asOf: asOf);
+  }
   final doc = _docMetaByName[name];
   final position = doc?.position ?? _fallbackPositionForName(name);
   final club = doc?.club ?? _fallbackKLeagueClubForName(name);
   final number = doc?.number ?? _fallbackJerseyNumberForName(name);
-  return (position: position, club: club, number: number);
+  return _applyKLeagueTransferOverride(name, (
+    position: position,
+    club: club,
+    number: number,
+  ), asOf: asOf);
 }

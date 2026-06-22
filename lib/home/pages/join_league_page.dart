@@ -30,40 +30,9 @@ class _JoinLeaguePageState extends State<JoinLeaguePage> {
     try {
       final data = await LeagueService.instance.joinLeagueByInviteCode(code);
       if (!mounted) return;
-      final draftTime = DateTime.tryParse('${data['draftDateTime'] ?? ''}');
-      if (draftTime == null) {
-        throw StateError('Draft 정보가 없는 리그입니다.');
-      }
       Navigator.pop(
         context,
-        _JoinedDraft(
-          leagueId: '${data['leagueId'] ?? ''}',
-          leagueName: '${data['leagueName'] ?? 'My League'}',
-          when: draftTime.toLocal(),
-          isSoccer: '${data['sport'] ?? 'soccer'}' == 'soccer',
-          teamCount: data['teamCount'] is int
-              ? data['teamCount'] as int
-              : int.tryParse('${data['teamCount'] ?? 8}') ?? 8,
-          memberCount: data['memberCount'] is int
-              ? data['memberCount'] as int
-              : int.tryParse('${data['memberCount'] ?? 1}') ?? 1,
-          inviteCode: '${data['inviteCode'] ?? code}',
-          ownerId: '${data['ownerId'] ?? ''}',
-          draftOrder:
-              (data['draftOrder'] as List<dynamic>? ?? const [])
-                  .whereType<Map>()
-                  .map(
-                    (item) => _DraftOrderEntry(
-                      uid: '${item['uid'] ?? ''}',
-                      displayName: '${item['displayName'] ?? 'Team'}',
-                      slot: item['slot'] is int
-                          ? item['slot'] as int
-                          : int.tryParse('${item['slot'] ?? 0}') ?? 0,
-                    ),
-                  )
-                  .toList()
-                ..sort((a, b) => a.slot.compareTo(b.slot)),
-        ),
+        _joinedDraftFromJoinLeagueResponse(data, fallbackCode: code),
       );
     } catch (e) {
       if (!mounted) return;
@@ -78,6 +47,7 @@ class _JoinLeaguePageState extends State<JoinLeaguePage> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    const actionGreen = Color(0xFF49B75C);
     return Scaffold(
       appBar: AppBar(title: const Text('리그 참가')),
       body: Padding(
@@ -91,7 +61,7 @@ class _JoinLeaguePageState extends State<JoinLeaguePage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Draft 화면에서 공유된 초대 코드를 입력하면 바로 리그에 참가할 수 있어요.',
+              '드래프트 화면에서 공유된 초대 코드를 입력하면 바로 리그에 참가할 수 있어요.',
               style: TextStyle(
                 color: cs.onSurface.withOpacity(0.72),
                 height: 1.4,
@@ -136,6 +106,12 @@ class _JoinLeaguePageState extends State<JoinLeaguePage> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: actionGreen,
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: actionGreen.withValues(alpha: 0.45),
+                  disabledForegroundColor: Colors.white70,
+                ),
                 onPressed: _joining ? null : _join,
                 child: _joining
                     ? const SizedBox(

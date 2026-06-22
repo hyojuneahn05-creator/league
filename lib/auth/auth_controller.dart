@@ -69,6 +69,10 @@ class AuthController extends ChangeNotifier {
     await _createUserIfNotExists(user);
   }
 
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    await _auth.sendPasswordResetEmail(email: email.trim());
+  }
+
   Future<void> signUpWithEmail({
     required String email,
     required String password,

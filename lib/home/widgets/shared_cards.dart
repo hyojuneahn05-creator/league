@@ -3,23 +3,37 @@ part of '../home_page.dart';
 enum _StandingsTableMode { compact, detail }
 
 const Map<String, String> _kLeagueKoreanTeamNames = {
-  'Bucheon FC 1995': '부천FC 1995',
-  'Gangwon FC': '강원 FC',
-  'FC Anyang': 'FC 안양',
-  'Daejeon Citizen': '대전 하나 시티즌',
-  'Daejeon Hana Citizen': '대전 하나 시티즌',
-  'Gwangju FC': '광주 FC',
-  'Jeju United FC': '제주 유나이티드',
-  'Jeju SK': '제주 유나이티드',
-  'Jeonbuk Motors': '전북 현대 모터스',
-  'Jeonbuk Hyundai Motors': '전북 현대 모터스',
-  'Incheon United': '인천 유나이티드',
-  'Pohang Steelers': '포항 스틸러스',
-  'FC Seoul': 'FC 서울',
-  'Ulsan Hyundai FC': '울산 HD',
-  'Ulsan HD': '울산 HD',
-  'Gimcheon Sangmu FC': '김천 상무',
-  'Gimcheon Sangmu': '김천 상무',
+  'Bucheon FC 1995': '부천',
+  '부천FC 1995': '부천',
+  '부천 FC 1995': '부천',
+  'Gangwon FC': '강원',
+  '강원 FC': '강원',
+  'FC Anyang': '안양',
+  'FC 안양': '안양',
+  'Daejeon Citizen': '대전',
+  'Daejeon Hana Citizen': '대전',
+  '대전 하나 시티즌': '대전',
+  'Gwangju FC': '광주',
+  '광주 FC': '광주',
+  'Jeju United FC': '제주',
+  'Jeju SK': '제주',
+  '제주 SK': '제주',
+  'Jeonbuk Motors': '전북',
+  'Jeonbuk Hyundai Motors': '전북',
+  '전북 현대 모터스': '전북',
+  '전북 현대': '전북',
+  'Incheon United': '인천',
+  '인천 유나이티드': '인천',
+  'Pohang Steelers': '포항',
+  '포항 스틸러스': '포항',
+  'FC Seoul': '서울',
+  'FC 서울': '서울',
+  '울산 HD': '울산',
+  'Ulsan Hyundai FC': '울산',
+  'Ulsan HD': '울산',
+  'Gimcheon Sangmu FC': '김천',
+  'Gimcheon Sangmu': '김천',
+  '김천 상무': '김천',
 };
 
 String _kLeagueDisplayTeamName(String value) {
@@ -28,22 +42,46 @@ String _kLeagueDisplayTeamName(String value) {
 }
 
 const Map<String, String> _kboKoreanTeamNames = {
-  'Doosan Bears': '두산',
-  'Hanwha Eagles': '한화',
-  'KIA Tigers': 'KIA',
-  'Kiwoom Heroes': '키움',
-  'KT Wiz': 'KT',
-  'kt wiz Suwon': 'KT',
-  'LG Twins': 'LG',
-  'Lotte Giants': '롯데',
-  'NC Dinos': 'NC',
-  'Samsung Lions': '삼성',
-  'SSG Landers': 'SSG',
+  'Doosan Bears': '베어스',
+  '두산': '베어스',
+  'Hanwha Eagles': '이글스',
+  '한화': '이글스',
+  'KIA Tigers': '타이거즈',
+  'KIA': '타이거즈',
+  'Kiwoom Heroes': '히어로즈',
+  '키움': '히어로즈',
+  'KT Wiz': '위즈',
+  'kt wiz Suwon': '위즈',
+  'KT': '위즈',
+  'LG Twins': '트윈스',
+  'LG': '트윈스',
+  'Lotte Giants': '자이언츠',
+  '롯데': '자이언츠',
+  'NC Dinos': '다이노스',
+  'NC': '다이노스',
+  'Samsung Lions': '라이온즈',
+  '삼성': '라이온즈',
+  'SSG Landers': '랜더스',
+  'SSG': '랜더스',
 };
 
 String _kboDisplayTeamName(String value) {
   final trimmed = value.trim();
   return _kboKoreanTeamNames[trimmed] ?? trimmed;
+}
+
+String _displayFantasyClubName(String value, {required bool isSoccer}) {
+  return isSoccer ? _kLeagueDisplayTeamName(value) : _kboDisplayTeamName(value);
+}
+
+String _displayFantasyOpponentLabel(String value, {required bool isSoccer}) {
+  final trimmed = value.trim();
+  if (trimmed.isEmpty) return '';
+  return trimmed
+      .split(RegExp(r'\s*/\s*'))
+      .map((part) => _displayFantasyClubName(part, isSoccer: isSoccer))
+      .where((part) => part.isNotEmpty)
+      .join(' / ');
 }
 
 class _SoccerStandingsRow {
@@ -55,6 +93,7 @@ class _SoccerStandingsRow {
   final int goalsFor;
   final int goalsAgainst;
   final int points;
+  final String form;
 
   const _SoccerStandingsRow({
     required this.team,
@@ -65,6 +104,7 @@ class _SoccerStandingsRow {
     required this.goalsFor,
     required this.goalsAgainst,
     required this.points,
+    this.form = '',
   });
 
   int get goalDiff => goalsFor - goalsAgainst;
@@ -105,7 +145,7 @@ class _BaseballStandingsRow {
 List<_SoccerStandingsRow> _soccerStandingsRows() {
   final rows = <_SoccerStandingsRow>[
     const _SoccerStandingsRow(
-      team: '부천FC 1995',
+      team: '부천',
       played: 23,
       wins: 16,
       draws: 4,
@@ -115,7 +155,7 @@ List<_SoccerStandingsRow> _soccerStandingsRows() {
       points: 52,
     ),
     const _SoccerStandingsRow(
-      team: '대전 하나 시티즌',
+      team: '대전',
       played: 23,
       wins: 15,
       draws: 4,
@@ -125,7 +165,7 @@ List<_SoccerStandingsRow> _soccerStandingsRows() {
       points: 49,
     ),
     const _SoccerStandingsRow(
-      team: 'FC 안양',
+      team: '안양',
       played: 23,
       wins: 14,
       draws: 4,
@@ -135,7 +175,7 @@ List<_SoccerStandingsRow> _soccerStandingsRows() {
       points: 46,
     ),
     const _SoccerStandingsRow(
-      team: 'FC 서울',
+      team: '서울',
       played: 23,
       wins: 13,
       draws: 5,
@@ -145,7 +185,7 @@ List<_SoccerStandingsRow> _soccerStandingsRows() {
       points: 44,
     ),
     const _SoccerStandingsRow(
-      team: '강원 FC',
+      team: '강원',
       played: 23,
       wins: 12,
       draws: 5,
@@ -155,7 +195,7 @@ List<_SoccerStandingsRow> _soccerStandingsRows() {
       points: 41,
     ),
     const _SoccerStandingsRow(
-      team: '김천 상무',
+      team: '김천',
       played: 23,
       wins: 11,
       draws: 6,
@@ -165,7 +205,7 @@ List<_SoccerStandingsRow> _soccerStandingsRows() {
       points: 39,
     ),
     const _SoccerStandingsRow(
-      team: '광주 FC',
+      team: '광주',
       played: 23,
       wins: 10,
       draws: 6,
@@ -175,7 +215,7 @@ List<_SoccerStandingsRow> _soccerStandingsRows() {
       points: 36,
     ),
     const _SoccerStandingsRow(
-      team: '인천 유나이티드',
+      team: '인천',
       played: 23,
       wins: 9,
       draws: 7,
@@ -185,7 +225,7 @@ List<_SoccerStandingsRow> _soccerStandingsRows() {
       points: 34,
     ),
     const _SoccerStandingsRow(
-      team: '제주 SK',
+      team: '제주',
       played: 23,
       wins: 9,
       draws: 5,
@@ -195,7 +235,7 @@ List<_SoccerStandingsRow> _soccerStandingsRows() {
       points: 32,
     ),
     const _SoccerStandingsRow(
-      team: '전북 현대',
+      team: '전북',
       played: 23,
       wins: 8,
       draws: 6,
@@ -205,7 +245,7 @@ List<_SoccerStandingsRow> _soccerStandingsRows() {
       points: 30,
     ),
     const _SoccerStandingsRow(
-      team: '포항 스틸러스',
+      team: '포항',
       played: 23,
       wins: 8,
       draws: 4,
@@ -215,7 +255,7 @@ List<_SoccerStandingsRow> _soccerStandingsRows() {
       points: 28,
     ),
     const _SoccerStandingsRow(
-      team: '울산 HD',
+      team: '울산',
       played: 23,
       wins: 7,
       draws: 5,
@@ -238,7 +278,7 @@ List<_SoccerStandingsRow> _soccerStandingsRows() {
 List<_BaseballStandingsRow> _baseballStandingsRows() {
   final rows = <_BaseballStandingsRow>[
     const _BaseballStandingsRow(
-      team: 'LG',
+      team: '트윈스',
       played: 40,
       wins: 26,
       draws: 1,
@@ -247,7 +287,7 @@ List<_BaseballStandingsRow> _baseballStandingsRows() {
       streak: 'W3',
     ),
     const _BaseballStandingsRow(
-      team: '한화',
+      team: '이글스',
       played: 40,
       wins: 24,
       draws: 1,
@@ -256,7 +296,7 @@ List<_BaseballStandingsRow> _baseballStandingsRows() {
       streak: 'W1',
     ),
     const _BaseballStandingsRow(
-      team: 'SSG',
+      team: '랜더스',
       played: 40,
       wins: 23,
       draws: 0,
@@ -265,7 +305,7 @@ List<_BaseballStandingsRow> _baseballStandingsRows() {
       streak: 'L1',
     ),
     const _BaseballStandingsRow(
-      team: '삼성',
+      team: '라이온즈',
       played: 40,
       wins: 22,
       draws: 1,
@@ -274,7 +314,7 @@ List<_BaseballStandingsRow> _baseballStandingsRows() {
       streak: 'W2',
     ),
     const _BaseballStandingsRow(
-      team: 'NC',
+      team: '다이노스',
       played: 40,
       wins: 21,
       draws: 1,
@@ -283,7 +323,7 @@ List<_BaseballStandingsRow> _baseballStandingsRows() {
       streak: 'W1',
     ),
     const _BaseballStandingsRow(
-      team: 'KT',
+      team: '위즈',
       played: 40,
       wins: 20,
       draws: 0,
@@ -292,7 +332,7 @@ List<_BaseballStandingsRow> _baseballStandingsRows() {
       streak: 'L2',
     ),
     const _BaseballStandingsRow(
-      team: '롯데',
+      team: '자이언츠',
       played: 40,
       wins: 19,
       draws: 1,
@@ -301,7 +341,7 @@ List<_BaseballStandingsRow> _baseballStandingsRows() {
       streak: 'W1',
     ),
     const _BaseballStandingsRow(
-      team: '두산',
+      team: '베어스',
       played: 40,
       wins: 18,
       draws: 0,
@@ -310,7 +350,7 @@ List<_BaseballStandingsRow> _baseballStandingsRows() {
       streak: 'L1',
     ),
     const _BaseballStandingsRow(
-      team: 'KIA',
+      team: '타이거즈',
       played: 40,
       wins: 17,
       draws: 0,
@@ -319,7 +359,7 @@ List<_BaseballStandingsRow> _baseballStandingsRows() {
       streak: 'W1',
     ),
     const _BaseballStandingsRow(
-      team: '키움',
+      team: '히어로즈',
       played: 40,
       wins: 15,
       draws: 0,
@@ -1334,6 +1374,8 @@ class _OverlayScaffold extends StatelessWidget {
   final Widget child;
   final String? title;
   final bool showSearch;
+  final VoidCallback? onHelpTap;
+  final Widget Function(BuildContext context, Widget child)? wrapHelpButton;
 
   const _OverlayScaffold({
     required this.isMyPageOpen,
@@ -1341,71 +1383,42 @@ class _OverlayScaffold extends StatelessWidget {
     required this.child,
     this.title,
     this.showSearch = true,
+    this.onHelpTap,
+    this.wrapHelpButton,
   });
 
   @override
   Widget build(BuildContext context) {
+    final palette = _leagueItSurfacePalette(context);
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTap: () => FocusScope.of(context).unfocus(),
       child: Stack(
         children: [
           Scaffold(
-            backgroundColor: Colors.white,
+            backgroundColor: palette.pageBackground,
             appBar: LeagueItSubAppBar(
               onMyPageTap: onToggleMyPage,
+              onHelpTap: onHelpTap,
               title: title,
               showSearch: showSearch,
+              wrapHelpButton: wrapHelpButton,
             ),
             body: child,
           ),
-          // Dim background (animated) + popup.
-          IgnorePointer(
-            ignoring: !isMyPageOpen,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 160),
-              curve: Curves.easeOut,
-              opacity: isMyPageOpen ? 1 : 0,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onToggleMyPage,
-                child: Container(color: Colors.black.withOpacity(0.35)),
-              ),
-            ),
-          ),
-          Positioned(
-            top: 100,
-            right: 24,
-            child: IgnorePointer(
-              ignoring: !isMyPageOpen,
-              child: AnimatedSlide(
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOutCubic,
-                offset: isMyPageOpen ? Offset.zero : const Offset(0.10, -0.06),
-                child: AnimatedScale(
-                  duration: const Duration(milliseconds: 260),
-                  curve: Curves.easeOutCubic,
-                  scale: isMyPageOpen ? 1.0 : 0.96,
-                  child: AnimatedOpacity(
-                    duration: const Duration(milliseconds: 180),
-                    curve: Curves.easeOut,
-                    opacity: isMyPageOpen ? 1 : 0,
-                    child: MyPageCard(
-                      isLoggedIn: homeKey.currentState?.isLoggedIn ?? false,
-                      onLogin: () {
-                        homeKey.currentState?.updateLogin(true);
-                        Navigator.pop(context);
-                      },
-                      onLogout: () {
-                        homeKey.currentState?.updateLogin(false);
-                        homeKey.currentState?.closePanels();
-                        Navigator.pop(context);
-                      },
-                    ),
-                  ),
-                ),
-              ),
-            ),
+          _MyPagePopupOverlay(
+            isOpen: isMyPageOpen,
+            onDismiss: onToggleMyPage,
+            isLoggedIn: homeKey.currentState?.isLoggedIn ?? false,
+            onLogin: () {
+              homeKey.currentState?.updateLogin(true);
+              Navigator.pop(context);
+            },
+            onLogout: () {
+              homeKey.currentState?.updateLogin(false);
+              homeKey.currentState?.closePanels();
+              Navigator.pop(context);
+            },
           ),
         ],
       ),
@@ -1416,11 +1429,13 @@ class _OverlayScaffold extends StatelessWidget {
 class _HomeStandingsCard extends StatelessWidget {
   final bool isSoccer;
   final Future<Map<String, dynamic>> leagueFuture;
+  final Widget Function(Widget child)? headerCoachmarkBuilder;
 
   const _HomeStandingsCard({
     super.key,
     required this.isSoccer,
     required this.leagueFuture,
+    this.headerCoachmarkBuilder,
   });
 
   @override
@@ -1488,6 +1503,35 @@ class _HomeStandingsCard extends StatelessWidget {
 
     final title = isSoccer ? 'K리그 순위표' : 'KBO 순위표';
     final subtitle = isSoccer ? 'K League' : 'KBO';
+    final header = Row(
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: headerChipBg,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: border),
+          ),
+          child: Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: isDark ? Colors.white70 : Colors.green.shade900,
+            ),
+          ),
+        ),
+      ],
+    );
+    final showcasedHeader = headerCoachmarkBuilder == null
+        ? header
+        : headerCoachmarkBuilder!(header);
 
     return Container(
       width: double.infinity,
@@ -1508,38 +1552,7 @@ class _HomeStandingsCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: headerChipBg,
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(color: border),
-                ),
-                child: Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white70 : Colors.green.shade900,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          showcasedHeader,
           const SizedBox(height: 10),
           if (isSoccer)
             _SoccerStandingsTable(
@@ -1616,6 +1629,7 @@ List<_SoccerStandingsRow> _soccerRowsFromApi(List<dynamic>? standings) {
         goalsFor: readInt(goalsMap['for'] ?? row['goalsFor']),
         goalsAgainst: readInt(goalsMap['against'] ?? row['goalsAgainst']),
         points: readInt(row['points'] ?? row['pts']),
+        form: '${row['form'] ?? ''}',
       ),
     );
   }
@@ -1713,6 +1727,7 @@ class _KboMatch {
   final String dateUtc;
   final String timeUtc;
   final String status;
+  final String liveInningLabel;
   final int? homeScore;
   final int? awayScore;
   final String venue;
@@ -1727,6 +1742,7 @@ class _KboMatch {
     required this.dateUtc,
     required this.timeUtc,
     required this.status,
+    required this.liveInningLabel,
     required this.homeScore,
     required this.awayScore,
     required this.venue,
@@ -1764,13 +1780,14 @@ List<_KboMatch> _kboMatchesFromApi(List<dynamic>? matches) {
         dateUtc: rawDateUtc,
         timeUtc: rawTimeUtc,
         status: '${match['status'] ?? ''}',
+        liveInningLabel: '${match['liveInningLabel'] ?? ''}'.trim(),
         homeScore: match['homeScore'] == null
             ? null
             : _readIntValue(match['homeScore']),
         awayScore: match['awayScore'] == null
             ? null
             : _readIntValue(match['awayScore']),
-        venue: '${match['venue'] ?? ''}',
+        venue: _kboVenueKoreanLabel('${match['venue'] ?? ''}'),
         city: '${match['city'] ?? ''}',
       ),
     );
@@ -1817,16 +1834,49 @@ String _shortTimeLabel(String value) {
 
 String _kboStatusLabel(String value) {
   final normalized = value.trim().toLowerCase();
-  if (normalized == 'played') return 'Final';
-  if (normalized == 'playing' || normalized == 'live') return 'Live';
-  if (normalized == 'postponed') return 'Postponed';
-  if (normalized == 'cancelled' || normalized == 'canceled') return 'Canceled';
-  return normalized.isEmpty ? 'Scheduled' : value;
+  if (normalized == 'played' || normalized == 'final') return '종료';
+  if (normalized == 'playing' || normalized == 'live') return '진행중';
+  if (normalized == 'postponed') return '연기';
+  if (normalized == 'cancelled' || normalized == 'canceled') return '취소';
+  if (normalized == 'fixture' ||
+      normalized == 'scheduled' ||
+      normalized == 'not started' ||
+      normalized.isEmpty) {
+    return '예정';
+  }
+  return value;
+}
+
+String _kboInningLabel(String value) {
+  final raw = value.trim();
+  if (raw.isEmpty) return '';
+  if (raw.contains('회')) return raw;
+  final digits = RegExp(r'\d+').firstMatch(raw)?.group(0);
+  if (digits == null || digits.isEmpty) return raw;
+  return '$digits회';
+}
+
+String _kboCompactLiveInningLabel(String value) {
+  final raw = value.trim();
+  if (raw.isEmpty) return '';
+  final digits = RegExp(r'\d+').firstMatch(raw)?.group(0);
+  if (digits == null || digits.isEmpty) return '';
+  if (raw.contains('초')) return '$digits ▲';
+  if (raw.contains('말')) return '$digits ▼';
+  return '$digits회';
+}
+
+String _kboStatusDisplayLabel(String status, {String liveInningLabel = ''}) {
+  final base = _kboStatusLabel(status);
+  if (!_isKboLiveStatus(status)) return base;
+  final inning = _kboInningLabel(liveInningLabel);
+  if (inning.isEmpty) return base;
+  return '$base · $inning';
 }
 
 bool _isKboLiveStatus(String value) {
   final normalized = _kboStatusLabel(value).trim().toLowerCase();
-  return normalized == 'live';
+  return normalized == '진행중';
 }
 
 String _kboDefaultDate(List<_KboMatch> matches) {
@@ -1892,10 +1942,12 @@ List<_FixturePair> _buildRoundFixtures({
 class _HomeScheduleCard extends StatelessWidget {
   final bool isSoccer;
   final Future<Map<String, dynamic>> leagueFuture;
+  final Widget Function(Widget child)? headerCoachmarkBuilder;
   const _HomeScheduleCard({
     super.key,
     required this.isSoccer,
     required this.leagueFuture,
+    this.headerCoachmarkBuilder,
   });
 
   @override
@@ -1907,10 +1959,12 @@ class _HomeScheduleCard extends StatelessWidget {
           final allFixtures =
               snapshot.data?['fixtures'] as List<dynamic>? ?? [];
           final fixtures = _pickUpcomingRoundFixturesFromApi(allFixtures);
-          final roundLabel = _readRoundLabelFromApi(fixtures) ?? 'Round 1';
+          final scheduleDate = fixtures.isEmpty ? '' : (fixtures.first['date'] ?? '');
           return _buildScheduleCard(
             context,
-            roundLabel: roundLabel,
+            roundLabel: scheduleDate.isEmpty
+                ? 'K리그 일정'
+                : 'K리그 일정 ${_homeScheduleDateLabel(scheduleDate)}',
             fixtures: fixtures,
             isSoccer: true,
           );
@@ -1939,8 +1993,10 @@ class _HomeScheduleCard extends StatelessWidget {
                 'home': match.home,
                 'away': match.away,
                 'date': match.dateTimeLabel,
+                'time': _shortTimeLabel(match.time),
                 'venue': match.venue,
-                'status': _kboStatusLabel(match.status),
+                'status': match.status,
+                'liveInningLabel': match.liveInningLabel,
                 'score': match.hasScore
                     ? '${match.homeScore} : ${match.awayScore}'
                     : '',
@@ -1950,8 +2006,8 @@ class _HomeScheduleCard extends StatelessWidget {
         return _buildScheduleCard(
           context,
           roundLabel: defaultDate.isEmpty
-              ? 'KBO Schedule'
-              : 'KBO Schedule · ${_homeScheduleDateLabel(defaultDate)}',
+              ? 'KBO 일정'
+              : 'KBO 일정 ${_homeScheduleDateLabel(defaultDate)}',
           fixtures: fixtures,
           isSoccer: false,
         );
@@ -1981,6 +2037,27 @@ class _HomeScheduleCard extends StatelessWidget {
         ? accent.withValues(alpha: 0.18)
         : accent.withValues(alpha: 0.10);
 
+    Widget inningBadge(String label) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: const Color(0xFF16A34A).withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(
+            color: const Color(0xFF16A34A).withValues(alpha: 0.30),
+          ),
+        ),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w900,
+            color: Color(0xFF16A34A),
+          ),
+        ),
+      );
+    }
+
     Widget teamName(String name, {TextAlign align = TextAlign.left}) {
       return Text(
         name,
@@ -1988,7 +2065,7 @@ class _HomeScheduleCard extends StatelessWidget {
         maxLines: 2,
         overflow: TextOverflow.clip,
         style: TextStyle(
-          fontSize: 13,
+          fontSize: 19,
           fontWeight: FontWeight.w900,
           height: 1.05,
           color: text,
@@ -2000,11 +2077,23 @@ class _HomeScheduleCard extends StatelessWidget {
       final dateValue = fixture['date'] ?? '';
       final parsedDateLabel = _homeScheduleDateLabel(dateValue);
       final dateLabel = parsedDateLabel.isEmpty ? dateValue : parsedDateLabel;
-      final venue = fixture['venue'] ?? '';
-      final status = fixture['status'] ?? '';
+      final timeLabel = fixture['time'] ?? '';
+      final rawVenue = fixture['venue'] ?? '';
+      final venue = isSoccer
+          ? _kLeagueVenueOrCityKoreanLabel(rawVenue)
+          : _kboVenueKoreanLabel(rawVenue);
+      final status = isSoccer ? '' : (fixture['status'] ?? '');
+      final liveInningLabel = isSoccer
+          ? ''
+          : (fixture['liveInningLabel'] ?? '');
       final minuteLabel = fixture['minute'] ?? '';
       final score = fixture['score'] ?? '';
-      final isLive = status.toLowerCase() == 'live';
+      final isLive = isSoccer
+          ? status.toLowerCase() == 'live'
+          : _isKboLiveStatus(status);
+      final compactInningLabel = isSoccer
+          ? ''
+          : _kboCompactLiveInningLabel(liveInningLabel);
       final centerText = score.isNotEmpty ? score : 'VS';
       final centerBg = score.isNotEmpty
           ? (isLive ? const Color(0xFFE8F7EC) : accentSoft)
@@ -2027,24 +2116,52 @@ class _HomeScheduleCard extends StatelessWidget {
               children: [
                 Expanded(child: teamName(fixture['home'] ?? 'TBD')),
                 Container(
+                  width: 108,
                   margin: const EdgeInsets.symmetric(horizontal: 10),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 11,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: centerBg,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: centerBorder),
-                  ),
-                  child: Text(
-                    centerText,
-                    style: TextStyle(
-                      fontSize: score.isNotEmpty ? 11 : 10.5,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: score.isNotEmpty ? 0 : 0.8,
-                      color: centerColor,
-                    ),
+                  child: Column(
+                    children: [
+                      if (!isSoccer && isLive) ...[
+                        const Text(
+                          'LIVE',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 0.8,
+                            color: Color(0xFF16A34A),
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                      ],
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 11,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: centerBg,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: centerBorder),
+                        ),
+                        child: Text(
+                          centerText,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: score.isNotEmpty ? 19 : 11,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: score.isNotEmpty ? 0 : 0.8,
+                            color: centerColor,
+                          ),
+                        ),
+                      ),
+                      if (!isSoccer &&
+                          isLive &&
+                          compactInningLabel.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        inningBadge(compactInningLabel),
+                      ],
+                    ],
                   ),
                 ),
                 Expanded(
@@ -2055,10 +2172,11 @@ class _HomeScheduleCard extends StatelessWidget {
                 ),
               ],
             ),
-            if (status.isNotEmpty ||
-                minuteLabel.isNotEmpty ||
-                dateLabel.isNotEmpty ||
-                venue.isNotEmpty) ...[
+            if (isSoccer &&
+                (status.isNotEmpty ||
+                    minuteLabel.isNotEmpty ||
+                    dateLabel.isNotEmpty ||
+                    venue.isNotEmpty)) ...[
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -2150,10 +2268,99 @@ class _HomeScheduleCard extends StatelessWidget {
                 ],
               ),
             ],
+            if (!isSoccer && (timeLabel.isNotEmpty || venue.isNotEmpty)) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  if (timeLabel.isNotEmpty)
+                    Text(
+                      timeLabel,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        color: muted,
+                      ),
+                    ),
+                  if (timeLabel.isNotEmpty && venue.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 6),
+                      child: Text(
+                        '·',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          color: muted,
+                        ),
+                      ),
+                    ),
+                  if (venue.isNotEmpty)
+                    Expanded(
+                      child: Text(
+                        venue,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: muted,
+                        ),
+                      ),
+                    )
+                  else
+                    const Spacer(),
+                ],
+              ),
+            ],
           ],
         ),
       );
     }
+
+    final header = Container(
+      padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
+      decoration: BoxDecoration(
+        color: rowBg,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: accentSoft,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              isSoccer ? Icons.sports_soccer : Icons.sports_baseball,
+              size: 18,
+              color: accent,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  roundLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    color: text,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+    final showcasedHeader = headerCoachmarkBuilder == null
+        ? header
+        : headerCoachmarkBuilder!(header);
 
     return Container(
       width: double.infinity,
@@ -2175,76 +2382,7 @@ class _HomeScheduleCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(14, 13, 14, 13),
-            decoration: BoxDecoration(
-              color: rowBg,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: accentSoft,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    isSoccer ? Icons.sports_soccer : Icons.sports_baseball,
-                    size: 18,
-                    color: accent,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        roundLabel,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w900,
-                          color: text,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        '${fixtures.length} matches',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          color: muted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: surface,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: border),
-                  ),
-                  child: Text(
-                    '리그 일정',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      color: muted,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          showcasedHeader,
           const SizedBox(height: 12),
           if (fixtures.isEmpty)
             Text(
@@ -2299,7 +2437,10 @@ List<Map<String, String>> _pickUpcomingRoundFixturesFromApi(
       'away': _kLeagueDisplayTeamName('${away['name'] ?? 'TBD'}'),
       'round': '${league['round'] ?? ''}',
       'date': date?.toIso8601String() ?? '',
-      'venue': '${venue['name'] ?? ''}',
+      'venue': _kLeagueVenueOrCityKoreanLabel(
+        '${venue['name'] ?? ''}',
+        '${venue['city'] ?? ''}',
+      ),
       'status': _kLeagueHomeFixtureStatusLabel(statusShort),
       'statusShort': statusShort,
       'minute': _fixtureMinuteLabel(
@@ -2364,26 +2505,19 @@ String _kLeagueHomeFixtureStatusLabel(String short) {
   }
 }
 
-String? _readRoundLabelFromApi(List<Map<String, String>> fixtures) {
-  if (fixtures.isEmpty) return null;
-  final round = fixtures.first['round'];
-  if (round == null || round.isEmpty) return null;
-  return round;
-}
-
 const List<String> _kLeagueTeams = [
-  '부천FC 1995',
-  '대전 하나 시티즌',
-  'FC 안양',
-  'FC 서울',
-  '강원 FC',
-  '김천 상무',
-  '광주 FC',
-  '인천 유나이티드',
-  '제주 SK',
-  '전북 현대',
-  '포항 스틸러스',
-  '울산 HD',
+  '부천',
+  '대전',
+  '안양',
+  '서울',
+  '강원',
+  '김천',
+  '광주',
+  '인천',
+  '제주',
+  '전북',
+  '포항',
+  '울산',
 ];
 
 const List<String> _kboTeams = [
